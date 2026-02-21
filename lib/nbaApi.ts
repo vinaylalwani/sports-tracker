@@ -98,7 +98,7 @@ class NBAApi {
   private apiKey: string | null = null
 
   constructor() {
-    this.apiKey = process.env.NBA_API_KEY || null
+    this.apiKey = process.env.NBA_API_KEY || process.env.NEXT_PUBLIC_NBA_API_KEY || null
   }
 
   private getHeaders(): HeadersInit {
@@ -186,7 +186,9 @@ class NBAApi {
 
   async getTeam(teamId: number) {
     try {
-      const response = await fetch(`${this.baseUrl}/teams/${teamId}`)
+      const response = await fetch(`${this.baseUrl}/teams/${teamId}`, {
+        headers: this.getHeaders(),
+      })
       if (!response.ok) throw new Error(`API error: ${response.status}`)
       
       return await response.json()

@@ -19,7 +19,7 @@ function getRiskFill(risk: number): string {
 function getRiskStroke(risk: number): string {
   if (risk <= 0) return "transparent"
   if (risk < 45) return "rgba(34, 197, 94, 0.9)"
-  if (risk < 65) return "rgba(245, 158, 11, 0.9)"
+  if (risk < 65) return "rgba(225, 158, 11, 0.9)"
   return "rgba(239, 68, 68, 0.95)"
 }
 
@@ -139,7 +139,7 @@ export function BodyOutline({ regions, className }: BodyOutlineProps) {
                   r.risk < 45 ? "text-green-500" : r.risk < 65 ? "text-amber-500" : "text-red-500"
                 )}
               >
-                {r.risk}%
+                {r.risk.toFixed(2)}%
               </span>
             </li>
           ))}

@@ -26,7 +26,7 @@ export const upcomingGames: Game[] = [
     restDays: 2,
     isBackToBack: false,
     isThreeInFour: false,
-    stressLevel: 1.2,
+    stressLevel: 1.0,
   },
   {
     id: "2",
@@ -36,7 +36,7 @@ export const upcomingGames: Game[] = [
     restDays: 0,
     isBackToBack: true,
     isThreeInFour: false,
-    stressLevel: 1.5,
+    stressLevel: 1.45,
   },
   {
     id: "3",
@@ -45,8 +45,8 @@ export const upcomingGames: Game[] = [
     location: "Away",
     restDays: 1,
     isBackToBack: false,
-    isThreeInFour: true,
-    stressLevel: 1.4,
+    isThreeInFour: true,     // Jan 15, 16, 18 = 3 games in 4 nights
+    stressLevel: 1.40,
   },
   {
     id: "4",
@@ -55,8 +55,8 @@ export const upcomingGames: Game[] = [
     location: "Home",
     restDays: 1,
     isBackToBack: false,
-    isThreeInFour: true,
-    stressLevel: 1.3,
+    isThreeInFour: false,
+    stressLevel: 1.15,
   },
   {
     id: "5",
@@ -65,8 +65,8 @@ export const upcomingGames: Game[] = [
     location: "Away",
     restDays: 1,
     isBackToBack: false,
-    isThreeInFour: true,
-    stressLevel: 1.35,
+    isThreeInFour: false,
+    stressLevel: 1.10,
   },
   {
     id: "6",
@@ -76,7 +76,7 @@ export const upcomingGames: Game[] = [
     restDays: 2,
     isBackToBack: false,
     isThreeInFour: false,
-    stressLevel: 1.1,
+    stressLevel: 1.0,
   },
   {
     id: "7",
@@ -86,7 +86,7 @@ export const upcomingGames: Game[] = [
     restDays: 1,
     isBackToBack: false,
     isThreeInFour: false,
-    stressLevel: 1.25,
+    stressLevel: 1.10,
   },
   {
     id: "8",
@@ -95,8 +95,8 @@ export const upcomingGames: Game[] = [
     location: "Away",
     restDays: 0,
     isBackToBack: true,
-    isThreeInFour: true,
-    stressLevel: 1.6,
+    isThreeInFour: false,
+    stressLevel: 1.50,
   },
 ]
 
@@ -126,3 +126,63 @@ export const pastGames: Game[] = [
     stressLevel: 1.3,
   },
 ]
+
+/** Compute schedule summary stats from a list of games */
+export function computeScheduleStats(games: Game[]) {
+  const hasBackToBack = games.some((g) => g.isBackToBack)
+  const hasThreeInFour = games.some((g) => g.isThreeInFour)
+  const b2bCount = games.filter((g) => g.isBackToBack).length
+  const threeInFourCount = games.filter((g) => g.isThreeInFour).length
+  const awayCount = games.filter((g) => g.location === "Away").length
+
+  // Road trip: only consider games within the next 7 days
+  const now = new Date()
+  const oneWeekOut = new Date(now)
+  oneWeekOut.setDate(oneWeekOut.getDate() + 7)
+
+  const nextWeekGames = games.filter((g) => {
+    const d = new Date(g.date)
+    return d >= now && d <= oneWeekOut
+  })
+
+  // If no games fall in the window (e.g. static/fallback dates in the past),
+  // use the first 7-day span of the dataset instead
+  const windowGames = nextWeekGames.length > 0 ? nextWeekGames : (() => {
+    if (games.length === 0) return []
+    const first = new Date(games[0].date)
+    const cutoff = new Date(first)
+    cutoff.setDate(cutoff.getDate() + 7)
+    return games.filter((g) => new Date(g.date) <= cutoff)
+  })()
+
+  let maxRoadTrip = 0
+  let currentRoadTrip = 0
+  for (const g of windowGames) {
+    if (g.location === "Away") {
+      currentRoadTrip++
+      maxRoadTrip = Math.max(maxRoadTrip, currentRoadTrip)
+    } else {
+      currentRoadTrip = 0
+    }
+  }
+
+  const totalRest = games.reduce((s, g) => s + g.restDays, 0)
+  const avgRest = games.length > 0 ? parseFloat((totalRest / games.length).toFixed(2)) : 0
+
+  const avgStress =
+    games.length > 0
+      ? parseFloat((games.reduce((s, g) => s + g.stressLevel, 0) / games.length).toFixed(2))
+      : 1.0
+
+  return {
+    backToBack: hasBackToBack,
+    threeInFour: hasThreeInFour,
+    b2bCount,
+    threeInFourCount,
+    awayCount,
+    roadTripLength: maxRoadTrip,
+    restDays: Math.round(avgRest),
+    scheduleMultiplier: avgStress,
+    totalGames: games.length,
+  }
+}

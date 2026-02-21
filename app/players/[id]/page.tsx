@@ -2,532 +2,480 @@
 
 import { useParams } from "next/navigation"
 import Link from "next/link"
-import { Sidebar } from "@/components/dashboard/Sidebar"
-import { Header } from "@/components/dashboard/Header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BodyOutline } from "@/components/dashboard/BodyOutline"
-import { players } from "@/lib/mockData"
-import {
-  computePredictionFromFeatures,
-  performanceTrends,
-} from "@/lib/analyticsData"
-import { playerHistoryData } from "@/lib/playerHistoryData"
-import { getPlayerBodyInjuryRegions } from "@/lib/playerBodyInjuryData"
-import { ArrowLeft, AlertTriangle, Activity, Users } from "lucide-react"
+import { ArrowLeft, Activity, Clock, AlertTriangle, Shield, Users, TrendingUp } from "lucide-react"
 import {
   LineChart,
   Line,
   BarChart,
   Bar,
+  ScatterChart,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-  ScatterChart,
-  Scatter,
-  ZAxis,
+  Legend,
+  Cell,
+  ReferenceLine,
 } from "recharts"
-import { useMemo } from "react"
+import { players } from "@/lib/mockData"
+import { injuryPredictions, performanceTrends } from "@/lib/analyticsData"
+import { playerHistoryData } from "@/lib/playerHistoryData"
+import { BodyOutline } from "@/components/dashboard/BodyOutline"
+import { getPlayerBodyRegionRisks } from "@/lib/playerBodyInjuryData"
+import { cn } from "@/lib/utils"
 
-export default function PlayerDashboardPage() {
+export default function PlayerPage() {
   const params = useParams()
-  const id = typeof params?.id === "string" ? params.id : null
+  const id = params.id as string
 
-  const player = useMemo(() => (id ? players.find((p) => p.id === id) : null), [id])
-
-  const prediction = useMemo(() => {
-    if (!player) return null
-    const history = playerHistoryData.find((h) => h.name === player.name)
-    const features = history
-      ? {
-          MIN_ROLLING_10: history.rollingMin?.length
-            ? history.rollingMin.reduce((a, b) => a + b, 0) / history.rollingMin.length
-            : history.minutesPerGame.year3,
-          CONTACT_RATE: history.contactRate,
-          AGE: history.age,
-          INJURY_COUNT: history.injuries.length,
-        }
-      : {
-          MIN_ROLLING_10: player.currentMinutes,
-          CONTACT_RATE: player.contactIntensity / 10,
-          AGE: player.age,
-          INJURY_COUNT: player.injuryHistory.count,
-        }
-    return computePredictionFromFeatures(features, {
-      position: player.position,
-      usageRate: history?.usageRate?.year3,
-    })
-  }, [player])
-
-  const bodyRegions = useMemo(
-    () =>
-      player && prediction
-        ? getPlayerBodyInjuryRegions(
-            player.id,
-            prediction.predictedRisk,
-            player.position,
-            player.injuryHistory.count
-          )
-        : [],
-    [player, prediction]
+  const player = players.find((p) => p.id === id)
+  const prediction = injuryPredictions.find(
+    (p) => p.player.toLowerCase().replace(/\s+/g, "-") === id
+  )
+  const history = playerHistoryData.find(
+    (p) => p.name.toLowerCase().replace(/\s+/g, "-") === id
   )
 
-  const chartData = useMemo(() => {
-    if (!player) return []
-    const historyTrends = performanceTrends.filter((t) => t.player === player.name)
-    if (historyTrends.length > 0) {
-      return historyTrends.slice(-20).map((t, i) => ({ game: i + 1, risk: t.riskScore }))
-    }
-    return player.trendData.map((value, index) => ({ game: index + 1, risk: value }))
-  }, [player])
-
-  const performanceTrendsForPlayer = useMemo(
-    () => (player ? performanceTrends.filter((t) => t.player === player.name) : []),
-    [player]
-  )
-
-  const allPlayerRisks = useMemo(() => {
-    return players.map((p) => {
-      const history = playerHistoryData.find((h) => h.name === p.name)
-      const features = history
-        ? {
-            MIN_ROLLING_10: history.rollingMin?.length
-              ? history.rollingMin.reduce((a, b) => a + b, 0) / history.rollingMin.length
-              : history.minutesPerGame.year3,
-            CONTACT_RATE: history.contactRate,
-            AGE: history.age,
-            INJURY_COUNT: history.injuries.length,
-          }
-        : {
-            MIN_ROLLING_10: p.currentMinutes,
-            CONTACT_RATE: p.contactIntensity / 10,
-            AGE: p.age,
-            INJURY_COUNT: p.injuryHistory.count,
-          }
-      const pred = computePredictionFromFeatures(features, {
-        position: p.position,
-        usageRate: history?.usageRate?.year3,
-      })
-      return { id: p.id, name: p.name, risk: pred.predictedRisk }
-    })
-  }, [])
-
-  const teammateComparisons = useMemo(
-    () =>
-      player && id
-        ? allPlayerRisks
-            .filter((r) => r.id !== id)
-            .map((teammate) => ({
-              teammateName: teammate.name,
-              teammateRisk: teammate.risk,
-              yourRisk: prediction?.predictedRisk ?? 50,
-            }))
-        : [],
-    [player, id, prediction?.predictedRisk, allPlayerRisks]
-  )
-
-  const modelRiskNum = prediction?.predictedRisk ?? 50
-  const scatterData = useMemo(
-    () =>
-      players.map((p) => ({
-        x: p.currentMinutes,
-        y: p.id === id ? modelRiskNum : p.riskScore,
-        z: p.age,
-        name: p.name,
-        isCurrent: p.id === id,
-      })),
-    [id, modelRiskNum]
-  )
-
-  if (!id || !player) {
+  if (!player) {
     return (
-      <div className="flex h-screen overflow-hidden bg-background">
-        <Sidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <Header />
-          <main className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
-            <Card className="max-w-md">
-              <CardContent className="pt-6">
-                <p className="text-muted-foreground mb-4">Player not found.</p>
-                <Button asChild variant="outline">
-                  <Link href="/">Back to Dashboard</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </main>
-        </div>
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 text-center space-y-4">
+            <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
+            <h2 className="text-xl font-bold">Player Not Found</h2>
+            <p className="text-muted-foreground">
+              No player found with ID &quot;{id}&quot;
+            </p>
+            <Link href="/">
+              <Button variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  const modelRisk = modelRiskNum
-  const riskClassification =
-    modelRisk < 45 ? "Low" : modelRisk < 60 ? "Moderate" : "High"
-  const getRiskBadgeVariant = (c: string) =>
-    c === "Low" ? "success" : c === "High" ? "danger" : "warning"
-  const getRiskColor = (risk: number) =>
-    risk < 45 ? "text-green-500" : risk < 60 ? "text-yellow-500" : "text-red-500"
-  const getRiskBarColor = (risk: number) =>
-    risk < 45 ? "bg-green-500" : risk < 60 ? "bg-yellow-500" : "bg-red-500"
+  // Performance trend data for this player
+  const playerTrends = performanceTrends
+    .filter((pt) => pt.player === player.name)
+    .map((pt, i) => ({
+      game: i + 1,
+      date: pt.date,
+      riskScore: parseFloat(pt.riskScore.toFixed(2)),
+      minutes: parseFloat(pt.minutes.toFixed(2)),
+      efficiency: parseFloat(pt.efficiency.toFixed(2)),
+    }))
 
-  const factors = prediction?.factors ?? []
-  const recommendedAction = prediction?.recommendedAction ?? "No restrictions"
+  const chartTrends =
+    playerTrends.length > 0
+      ? playerTrends.slice(-20)
+      : player.trendData.slice(-20).map((risk, i) => ({
+          game: i + 1,
+          date: "",
+          riskScore: parseFloat(risk.toFixed(2)),
+          minutes: parseFloat(player.currentMinutes.toFixed(2)),
+          efficiency: parseFloat((0.5 + (100 - risk) / 200).toFixed(2)),
+        }))
+
+  // Body region risks
+  const bodyRegions = getPlayerBodyRegionRisks(player.name)
+
+  // Injury history
+  const injuries = history?.injuries ?? []
+
+  // Benchmark comparison: this player vs all teammates
+  const benchmarkData = players.map((p) => ({
+    name: p.name.split(" ").pop() ?? p.name,
+    fullName: p.name,
+    riskScore: parseFloat(p.riskScore.toFixed(2)),
+    minutes: parseFloat(p.currentMinutes.toFixed(2)),
+    isCurrent: p.id === player.id,
+  }))
+
+  // Risk vs Minutes scatter data (team view)
+  const scatterData = players.map((p) => ({
+    name: p.name,
+    shortName: p.name.split(" ").pop() ?? p.name,
+    minutes: parseFloat(p.currentMinutes.toFixed(2)),
+    risk: parseFloat(p.riskScore.toFixed(2)),
+    isCurrent: p.id === player.id,
+  }))
+
+  const getRiskColor = (risk: number) => {
+    if (risk < 45) return "text-green-500"
+    if (risk < 65) return "text-amber-500"
+    return "text-red-500"
+  }
+
+  const getRiskBadgeVariant = (classification: string) => {
+    switch (classification) {
+      case "Low":
+        return "success" as const
+      case "Moderate":
+        return "warning" as const
+      case "High":
+        return "danger" as const
+      default:
+        return "default" as const
+    }
+  }
+
+  const getActionStyle = (risk: number) => {
+    if (risk >= 75) return "bg-red-500/15 border-red-500/30 text-red-400"
+    if (risk >= 55) return "bg-amber-500/15 border-amber-500/30 text-amber-400"
+    return "bg-green-500/15 border-green-500/30 text-green-400"
+  }
+
+  const minutesDiffer = player.currentMinutes !== player.recommendedMinutes
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-7xl space-y-6">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" asChild>
-                <Link href="/" aria-label="Back to dashboard">
-                  <ArrowLeft className="h-5 w-5" />
-                </Link>
-              </Button>
-              <div className="flex-1">
-                <h1 className="text-3xl font-bold">{player.name}</h1>
-                <p className="text-muted-foreground">
-                  {player.position} · Age {player.age}
-                </p>
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-6xl p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Link href="/">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold">{player.name}</h1>
+            <p className="text-muted-foreground">{player.position}</p>
+          </div>
+          <Badge
+            variant={getRiskBadgeVariant(player.riskClassification)}
+            className="text-lg px-4 py-1"
+          >
+            {player.riskClassification} Risk
+          </Badge>
+        </div>
+
+        {/* Key stats row — 3 cards, no Recommended MPG */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-6 text-center">
+              <Activity className={cn("h-8 w-8 mx-auto mb-2", getRiskColor(player.riskScore))} />
+              <div className="text-3xl font-bold text-white">
+                {player.riskScore.toFixed(2)}
               </div>
-              <Badge variant={getRiskBadgeVariant(riskClassification)}>
-                {riskClassification} Risk
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground -mt-2">
-              Risk score from AI model (same as Analytics)
-            </p>
+              <p className="text-sm text-muted-foreground mt-1">Risk Score</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6 text-center">
+              <Clock className="h-8 w-8 mx-auto mb-2 text-[#FDB927]" />
+              <div className="text-3xl font-bold">{player.currentMinutes.toFixed(2)}</div>
+              <p className="text-sm text-muted-foreground mt-1">Current MPG</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6 text-center">
+              <Shield className="h-8 w-8 mx-auto mb-2 text-[#552583]" />
+              <div className="text-3xl font-bold">{history?.age ?? "—"}</div>
+              <p className="text-sm text-muted-foreground mt-1">Age</p>
+            </CardContent>
+          </Card>
+        </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Body outline – injury likelihood by region */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-[#FDB927]" />
-                    Injury Risk by Body Region
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Based on AI model and current load data
+        {/* Recommended Action banner */}
+        {prediction && (
+          <Card className={cn("border-2", getActionStyle(player.riskScore))}>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wider opacity-80 mb-1">
+                    Recommended Action
                   </p>
-                </CardHeader>
-                <CardContent>
-                  <BodyOutline regions={bodyRegions} />
-                </CardContent>
-              </Card>
+                  <p className="text-base font-bold">{prediction.recommendedAction}</p>
+                </div>
+                {minutesDiffer && (
+                  <div className="text-right">
+                    <p className="text-xs opacity-80">Adjust minutes</p>
+                    <p className="text-lg font-bold">
+                      {player.currentMinutes.toFixed(2)} → {player.recommendedMinutes.toFixed(2)} MPG
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-              {/* Stats */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle>Stats & Load</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Risk Score (model)</span>
-                    <span className={`text-2xl font-bold ${getRiskColor(modelRisk)}`}>
-                      {modelRisk}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${getRiskBarColor(modelRisk)}`}
-                      style={{ width: `${Math.min(100, modelRisk)}%` }}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Recommended min</div>
-                      <div className="text-lg font-semibold">{player.recommendedMinutes}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Current avg min</div>
-                      <div className="text-lg font-semibold">{player.currentMinutes}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Historical load</div>
-                      <div className="text-lg font-semibold">{player.historicalLoad}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Game load</div>
-                      <div className="text-lg font-semibold">{player.gameLoad}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Contact intensity</div>
-                      <div className="text-lg font-semibold">{player.contactIntensity}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Injuries (history)</div>
-                      <div className="text-lg font-semibold">{player.injuryHistory.count}</div>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-border text-sm text-muted-foreground">
-                    Last injury: {player.injuryHistory.lastInjury} · Recovery days:{" "}
-                    {player.injuryHistory.recoveryDays.join(", ")}
-                  </div>
-                </CardContent>
-              </Card>
+        {/* Body outline + AI risk assessment */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Injury Risk Map</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <BodyOutline regions={bodyRegions} />
+            </CardContent>
+          </Card>
 
-              {/* Risk factors & recommendation (analytics-style) */}
-              <Card className="lg:col-span-1">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-yellow-500" />
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Risk Assessment</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {prediction && (
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">
                     Risk Factors
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium mb-2">Key factors</p>
-                    <div className="flex flex-wrap gap-2">
-                      {factors.map((factor, i) => (
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {prediction.factors.length > 0 ? (
+                      prediction.factors.map((factor, i) => (
                         <Badge key={i} variant="outline">
                           {factor}
                         </Badge>
-                      ))}
-                    </div>
+                      ))
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        No major risk factors identified
+                      </span>
+                    )}
                   </div>
-                  <div className="pt-2 border-t border-border">
-                    <p className="text-sm font-medium text-[#FDB927]">{recommendedAction}</p>
-                  </div>
-                  <div className="pt-2">
-                    <p className="text-sm font-medium mb-2">Risk trend (from model when available)</p>
-                    <div className="h-24">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                          <XAxis dataKey="game" hide />
-                          <YAxis domain={["dataMin - 5", "dataMax + 5"]} width={28} />
-                          <Tooltip />
-                          <Line
-                            type="monotone"
-                            dataKey="risk"
-                            stroke="#552583"
-                            strokeWidth={2}
-                            dot={false}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Performance Trends (from analytics) */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance Trends</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {performanceTrendsForPlayer.length > 0
-                    ? `Model-based trend for ${player.name}`
-                    : "Risk trend (last 20 games)"}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="risk">
-                  <TabsList>
-                    <TabsTrigger value="risk">Risk Score</TabsTrigger>
-                    <TabsTrigger value="minutes">Minutes</TabsTrigger>
-                    <TabsTrigger value="efficiency">Efficiency</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="risk" className="mt-4">
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart
-                        data={
-                          performanceTrendsForPlayer.length > 0
-                            ? performanceTrendsForPlayer.slice(-30)
-                            : chartData.map((d) => ({ date: `Game ${d.game}`, riskScore: d.risk }))
-                        }
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                        <XAxis
-                          dataKey={performanceTrendsForPlayer.length > 0 ? "date" : "date"}
-                          stroke="hsl(var(--muted-foreground))"
-                          tick={{ fontSize: 10 }}
-                        />
-                        <YAxis stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="riskScore"
-                          stroke="#552583"
-                          strokeWidth={2}
-                          name="Risk Score"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </TabsContent>
-                  <TabsContent value="minutes" className="mt-4">
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart
-                        data={
-                          performanceTrendsForPlayer.length > 0
-                            ? performanceTrendsForPlayer.slice(-30)
-                            : chartData.map((_, i) => ({
-                                date: `Game ${i + 1}`,
-                                minutes: player.currentMinutes,
-                              }))
-                        }
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                        <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10 }} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="minutes" fill="#FDB927" name="Minutes" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </TabsContent>
-                  <TabsContent value="efficiency" className="mt-4">
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart
-                        data={
-                          performanceTrendsForPlayer.length > 0
-                            ? performanceTrendsForPlayer.slice(-30).map((t) => ({
-                                ...t,
-                                efficiency: 0.5 + (100 - t.riskScore) / 200,
-                              }))
-                            : chartData.map((d) => ({
-                                date: `Game ${d.game}`,
-                                efficiency: 0.5 + (100 - d.risk) / 200,
-                              }))
-                        }
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                        <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10 }} />
-                        <YAxis stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="efficiency"
-                          stroke="#552583"
-                          strokeWidth={2}
-                          name="Efficiency"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-
-            {/* Player Comparisons – you vs each teammate */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-[#FDB927]" />
-                  Baseline Risk vs Teammates
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Your injury risk (model) compared to each teammate
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {teammateComparisons.map((c, idx) => {
-                    const total = c.yourRisk + c.teammateRisk || 1
-                    const yourPct = (c.yourRisk / total) * 100
-                    return (
-                      <div key={idx} className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium">Baseline injury risk</span>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <div className="text-muted-foreground">You</div>
-                              <div className="font-bold">{c.yourRisk.toFixed(1)}</div>
-                            </div>
-                            <span className="text-muted-foreground">vs</span>
-                            <div className="text-left">
-                              <div className="text-muted-foreground">{c.teammateName}</div>
-                              <div className="font-bold">{c.teammateRisk.toFixed(1)}</div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden flex">
-                          <div
-                            className="h-full bg-primary transition-all"
-                            style={{ width: `${yourPct}%` }}
-                          />
-                          <div
-                            className="h-full bg-[#FDB927] transition-all"
-                            style={{ width: `${100 - yourPct}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
                 </div>
-              </CardContent>
-            </Card>
+              )}
 
-            {/* Risk vs Minutes (from analytics) */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Risk vs Minutes</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Team view — you are highlighted in gold
-                </p>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={320}>
-                  <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                    <XAxis
-                      type="number"
-                      dataKey="x"
-                      name="Minutes"
-                      stroke="hsl(var(--muted-foreground))"
+              {injuries.length > 0 && (
+                <div className="pt-4 border-t">
+                  <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                    Injury History ({injuries.length} recorded)
+                  </h3>
+                  <ul className="space-y-2 max-h-48 overflow-y-auto">
+                    {injuries.map((injury: any, i: number) => {
+                      const bodyPart: string =
+                        injury.body_part ?? injury.bodyPart ?? injury.type ?? injury.description ?? injury.name ?? "Unknown"
+                      const rawSeason: string = injury.season ?? injury.year ?? ""
+                      // Extract only the season (e.g. "2023-24") — strip any date info
+                      const season = rawSeason.replace(/\d{4}-\d{2}-\d{2}/g, "").trim()
+                        || (rawSeason.match(/\d{4}/)?.[0] ?? "")
+                      const gamesMissed: number | undefined = injury.gamesMissed ?? injury.games_missed
+                      return (
+                        <li key={i} className="flex items-center justify-between text-sm py-1.5 px-2 rounded-md bg-muted/40">
+                          <div className="flex flex-col">
+                            <span className="font-medium capitalize">{bodyPart}</span>
+                            {season && <span className="text-xs text-muted-foreground">{season}</span>}
+                          </div>
+                          <span className="text-muted-foreground">
+                            {gamesMissed != null ? `${gamesMissed} games missed` : ""}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Benchmark Comparison: player vs teammates */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-[#FDB927]" />
+              Benchmark Comparison vs. Teammates
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={benchmarkData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} />
+                <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
+                <Tooltip
+                  content={({ active, payload }: any) => {
+                    if (active && payload?.length) {
+                      const d = payload[0].payload
+                      return (
+                        <div className="rounded-lg border bg-card p-3 shadow-lg">
+                          <p className="font-semibold mb-1">{d.fullName}</p>
+                          <p className="text-sm">Risk Score: {d.riskScore.toFixed(2)}</p>
+                          <p className="text-sm">Minutes: {d.minutes.toFixed(2)}</p>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                <Bar dataKey="riskScore" radius={[4, 4, 0, 0]} name="Risk Score">
+                  {benchmarkData.map((entry, index) => (
+                    <Cell
+                      key={index}
+                      fill={entry.isCurrent ? "#FDB927" : "#552583"}
+                      opacity={entry.isCurrent ? 1 : 0.6}
+                      stroke={entry.isCurrent ? "#FDB927" : "none"}
+                      strokeWidth={entry.isCurrent ? 2 : 0}
                     />
-                    <YAxis
-                      type="number"
-                      dataKey="y"
-                      name="Risk"
-                      stroke="hsl(var(--muted-foreground))"
-                    />
-                    <ZAxis type="number" dataKey="z" range={[50, 400]} name="Age" />
-                    <Tooltip
-                      cursor={{ strokeDasharray: "3 3" }}
-                      content={({ active, payload }) => {
-                        if (active && payload?.[0]) {
-                          const d = payload[0].payload as { name: string; x: number; y: number; z: number; isCurrent?: boolean }
-                          return (
-                            <div className="rounded-lg border bg-card p-3 shadow-lg">
-                              <p className="font-semibold">{d.name}{d.isCurrent ? " (you)" : ""}</p>
-                              <p className="text-sm">Minutes: {d.x}</p>
-                              <p className="text-sm">Risk: {d.y}</p>
-                              <p className="text-sm">Age: {d.z}</p>
-                            </div>
-                          )
-                        }
-                        return null
-                      }}
-                    />
-                    <Scatter
-                      name="Teammates"
-                      data={scatterData.filter((p) => !p.isCurrent)}
-                      fill="#552583"
-                      fillOpacity={0.7}
-                    />
-                    <Scatter
-                      name="You"
-                      data={scatterData.filter((p) => p.isCurrent)}
-                      fill="#FDB927"
-                      fillOpacity={1}
-                    />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        </main>
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="flex justify-center gap-6 mt-3 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded" style={{ backgroundColor: "#FDB927" }} />
+                {player.name} (You)
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded" style={{ backgroundColor: "#552583", opacity: 0.6 }} />
+                Teammates
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Risk vs Minutes scatter (team view) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-[#552583]" />
+              Risk vs. Minutes (Team View)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={350}>
+              <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis
+                  dataKey="minutes"
+                  name="Minutes"
+                  stroke="hsl(var(--muted-foreground))"
+                  label={{ value: "Minutes Per Game", position: "insideBottom", offset: -5, style: { fill: "hsl(var(--muted-foreground))" } }}
+                />
+                <YAxis
+                  dataKey="risk"
+                  name="Risk"
+                  stroke="hsl(var(--muted-foreground))"
+                  domain={[0, 100]}
+                  label={{ value: "Risk Score", angle: -90, position: "insideLeft", style: { fill: "hsl(var(--muted-foreground))" } }}
+                />
+                <Tooltip
+                  content={({ active, payload }: any) => {
+                    if (active && payload?.length) {
+                      const d = payload[0].payload
+                      return (
+                        <div className="rounded-lg border bg-card p-3 shadow-lg">
+                          <p className="font-semibold mb-1">{d.name}</p>
+                          <p className="text-sm">Risk: {d.risk.toFixed(2)}</p>
+                          <p className="text-sm">Minutes: {d.minutes.toFixed(2)}</p>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                {/* Teammates */}
+                <Scatter
+                  data={scatterData.filter((d) => !d.isCurrent)}
+                  fill="#552583"
+                  opacity={0.6}
+                  name="Teammates"
+                >
+                  {scatterData
+                    .filter((d) => !d.isCurrent)
+                    .map((_, i) => (
+                      <Cell key={i} r={6} />
+                    ))}
+                </Scatter>
+                {/* Current player — highlighted */}
+                <Scatter
+                  data={scatterData.filter((d) => d.isCurrent)}
+                  fill="#FDB927"
+                  name={player.name}
+                >
+                  {scatterData
+                    .filter((d) => d.isCurrent)
+                    .map((_, i) => (
+                      <Cell key={i} r={10} stroke="#FDB927" strokeWidth={3} />
+                    ))}
+                </Scatter>
+                <Legend />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Performance Trends — last 20 games chart + table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-[#FDB927]" />
+              Performance Trends (Last {chartTrends.length} Games)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={chartTrends}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                <XAxis dataKey="game" stroke="hsl(var(--muted-foreground))" />
+                <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
+                <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" />
+                <Tooltip
+                  content={({ active, payload }: any) => {
+                    if (active && payload?.length) {
+                      const d = payload[0].payload
+                      return (
+                        <div className="rounded-lg border bg-card p-3 shadow-lg">
+                          <p className="font-semibold mb-1">Game {d.game}</p>
+                          {d.date && <p className="text-xs text-muted-foreground mb-1">{d.date}</p>}
+                          <p className="text-sm">Risk: {d.riskScore.toFixed(2)}</p>
+                          <p className="text-sm">Minutes: {d.minutes.toFixed(2)}</p>
+                          <p className="text-sm">Efficiency: {d.efficiency.toFixed(2)}</p>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                <Legend />
+                <Line yAxisId="left" type="monotone" dataKey="riskScore" stroke="#552583" strokeWidth={2} name="Risk Score" dot={{ fill: "#552583", r: 3 }} />
+                <Line yAxisId="right" type="monotone" dataKey="minutes" stroke="#FDB927" strokeWidth={2} name="Minutes" dot={{ fill: "#FDB927", r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+
+            {/* Game-by-game table */}
+            <div className="max-h-64 overflow-y-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/60 sticky top-0">
+                  <tr>
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">Game</th>
+                    {chartTrends[0]?.date && (
+                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Date</th>
+                    )}
+                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Risk</th>
+                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Minutes</th>
+                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Efficiency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chartTrends.map((g) => (
+                    <tr key={g.game} className="border-t border-border/50 hover:bg-muted/30">
+                      <td className="py-2 px-3">{g.game}</td>
+                      {g.date && <td className="py-2 px-3 text-muted-foreground">{g.date}</td>}
+                      <td className={cn("py-2 px-3 text-right font-semibold tabular-nums",
+                        g.riskScore < 45 ? "text-green-500" : g.riskScore < 65 ? "text-amber-500" : "text-red-500"
+                      )}>
+                        {g.riskScore.toFixed(2)}
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums">{g.minutes.toFixed(2)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{g.efficiency.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

@@ -26,7 +26,7 @@ export function FeatureImportanceChart({ data }: FeatureImportanceChartProps) {
       return (
         <div className="rounded-lg border bg-card p-3 shadow-lg">
           <p className="font-semibold mb-1">{data.feature}</p>
-          <p className="text-sm">Importance: {data.importance}%</p>
+          <p className="text-sm">Importance: {data.importance.toFixed(2)}%</p>
           <p className="text-sm text-muted-foreground">
             Contribution to risk score
           </p>
@@ -72,7 +72,7 @@ export function FeatureImportanceChart({ data }: FeatureImportanceChartProps) {
                 style={{ backgroundColor: COLORS[index % COLORS.length] }}
               />
               <span className="text-muted-foreground">{item.feature}:</span>
-              <span className="font-semibold">{item.percentage}%</span>
+              <span className="font-semibold">{item.percentage.toFixed(2)}%</span>
             </div>
           ))}
         </div>

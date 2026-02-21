@@ -1,188 +1,192 @@
+import {
+  injuryPredictions,
+  performanceTrends,
+  baselineRiskData,
+  predictRisk,
+} from "./analyticsData";
+import { playerHistoryData } from "./playerHistoryData";
+import { upcomingGames } from "./scheduleData";
+import { projectDynamicRisk } from "./riskProjection";
+import rawWeights from "./model_weights.json";
+
+/* ================================
+   Player type & data
+================================ */
 export interface Player {
-  id: string
-  name: string
-  position: string
-  riskScore: number
-  riskClassification: "Low" | "Moderate" | "High"
-  recommendedMinutes: number
-  currentMinutes: number
-  age: number
-  injuryHistory: {
-    count: number
-    lastInjury: string
-    recoveryDays: number[]
-  }
-  historicalLoad: number
-  contactIntensity: number
-  gameLoad: number
-  trendData: number[]
+  id: string;
+  name: string;
+  position: string;
+  riskScore: number;
+  riskClassification: "Low" | "Moderate" | "High";
+  recommendedMinutes: number;
+  currentMinutes: number;
+  trendData: number[];
 }
 
+function classifyRisk(risk: number): "Low" | "Moderate" | "High" {
+  if (risk < 45) return "Low";
+  if (risk < 65) return "Moderate";
+  return "High";
+}
+
+function recommendedMinutes(risk: number, currentMin: number): number {
+  if (risk >= 85) return parseFloat((currentMin * 0.8).toFixed(2));
+  if (risk >= 75) return parseFloat((currentMin * 0.85).toFixed(2));
+  if (risk >= 65) return parseFloat((currentMin * 0.9).toFixed(2));
+  if (risk >= 55) return parseFloat((currentMin * 0.95).toFixed(2));
+  return parseFloat(currentMin.toFixed(2));
+}
+
+export const players: Player[] = playerHistoryData.map((ph) => {
+  const prediction = injuryPredictions.find((p) => p.player === ph.name);
+  const riskScore = prediction?.predictedRisk ?? 50;
+  const currentMin = ph.minutesPerGame.year3;
+
+  const playerTrends = performanceTrends
+    .filter((pt) => pt.player === ph.name)
+    .slice(-10)
+    .map((pt) => parseFloat(pt.riskScore.toFixed(2)));
+
+  const trendData =
+    playerTrends.length > 0
+      ? playerTrends
+      : Array(10).fill(parseFloat(riskScore.toFixed(2)));
+
+  return {
+    id: ph.name.toLowerCase().replace(/\s+/g, "-"),
+    name: ph.name,
+    position: ph.position ?? "—",
+    riskScore: parseFloat(riskScore.toFixed(2)),
+    riskClassification: classifyRisk(riskScore),
+    recommendedMinutes: recommendedMinutes(riskScore, currentMin),
+    currentMinutes: parseFloat(currentMin.toFixed(2)),
+    trendData,
+  };
+});
+
+/* ================================
+   Risk Trend Data — next 8 games projected
+================================ */
 export interface RiskTrendData {
-  game: number
-  baselineRisk: number
-  dynamicRisk: number
-  minutes: number
-  scheduleStress: number
-  gameLoadScore: number
+  game: number;
+  baselineRisk: number;
+  dynamicRisk: number;
+  minutes: number;
+  scheduleStress: number;
+  gameLoadScore: number;
+  opponent?: string;
+  location?: string;
+  date?: string;
 }
 
+// Export these so the chart can recompute with live API data
+export const teamBaselineRisk = parseFloat(
+  (
+    baselineRiskData.reduce((s, b) => s + b.baselineRisk, 0) /
+    (baselineRiskData.length || 1)
+  ).toFixed(2)
+);
+
+export const teamAvgMinutes = parseFloat(
+  (
+    playerHistoryData.reduce((s, p) => s + p.minutesPerGame.year3, 0) /
+    (playerHistoryData.length || 1)
+  ).toFixed(2)
+);
+
+// Static fallback risk trend (from hardcoded schedule)
+export const riskTrendData: RiskTrendData[] = projectDynamicRisk(
+  upcomingGames.slice(0, 8),
+  teamBaselineRisk,
+  teamAvgMinutes
+);
+
+/* ================================
+   Schedule Stress
+================================ */
 export interface ScheduleStress {
-  backToBack: boolean
-  threeInFour: boolean
-  roadTripLength: number
-  restDays: number
-  scheduleMultiplier: number
+  backToBack: boolean;
+  threeInFour: boolean;
+  roadTripLength: number;
+  restDays: number;
+  scheduleMultiplier: number;
 }
 
-export interface VideoAnalysis {
-  jumpCount: number
-  accelerationBursts: number
-  movementIntensityScore: number
-  contactProxyScore: number
-  gameLoadStressScore: number
+function buildScheduleStress(): ScheduleStress {
+  const hasBackToBack = upcomingGames.some((g) => g.isBackToBack);
+  const hasThreeInFour = upcomingGames.some((g) => g.isThreeInFour);
+
+  let maxRoadTrip = 0;
+  let currentRoadTrip = 0;
+  for (const g of upcomingGames) {
+    if (g.location === "Away") {
+      currentRoadTrip++;
+      maxRoadTrip = Math.max(maxRoadTrip, currentRoadTrip);
+    } else {
+      currentRoadTrip = 0;
+    }
+  }
+
+  const totalRest = upcomingGames.reduce((s, g) => s + g.restDays, 0);
+  const avgRest = parseFloat(
+    (totalRest / (upcomingGames.length || 1)).toFixed(2)
+  );
+
+  const avgStress = parseFloat(
+    (
+      upcomingGames.reduce((s, g) => s + g.stressLevel, 0) /
+      (upcomingGames.length || 1)
+    ).toFixed(2)
+  );
+
+  return {
+    backToBack: hasBackToBack,
+    threeInFour: hasThreeInFour,
+    roadTripLength: maxRoadTrip,
+    restDays: Math.round(avgRest),
+    scheduleMultiplier: avgStress,
+  };
 }
 
+export const scheduleStress: ScheduleStress = buildScheduleStress();
+
+/* ================================
+   Feature Importance
+================================ */
 export interface FeatureImportance {
-  feature: string
-  importance: number
-  percentage: number
+  feature: string;
+  importance: number;
+  percentage: number;
 }
 
-export const players: Player[] = [
-  {
-    id: "1",
-    name: "LeBron James",
-    position: "SF",
-    riskScore: 68,
-    riskClassification: "Moderate",
-    recommendedMinutes: 32,
-    currentMinutes: 35,
-    age: 39,
-    injuryHistory: {
-      count: 3,
-      lastInjury: "2023-12-15",
-      recoveryDays: [14, 21, 10],
-    },
-    historicalLoad: 85,
-    contactIntensity: 72,
-    gameLoad: 78,
-    trendData: [65, 67, 66, 68, 69, 70, 68, 67, 68, 70, 69, 68, 67, 69, 68, 70, 69, 68, 67, 68],
-  },
-  {
-    id: "2",
-    name: "Anthony Davis",
-    position: "PF/C",
-    riskScore: 75,
-    riskClassification: "High",
-    recommendedMinutes: 28,
-    currentMinutes: 34,
-    age: 31,
-    injuryHistory: {
-      count: 5,
-      lastInjury: "2024-01-10",
-      recoveryDays: [20, 15, 18, 12, 25],
-    },
-    historicalLoad: 92,
-    contactIntensity: 88,
-    gameLoad: 85,
-    trendData: [72, 73, 74, 75, 76, 75, 74, 75, 76, 75, 74, 75, 76, 75, 74, 75, 76, 75, 74, 75],
-  },
-  {
-    id: "3",
-    name: "Austin Reaves",
-    position: "SG",
-    riskScore: 42,
-    riskClassification: "Low",
-    recommendedMinutes: 36,
-    currentMinutes: 33,
-    age: 25,
-    injuryHistory: {
-      count: 1,
-      lastInjury: "2023-11-20",
-      recoveryDays: [7],
-    },
-    historicalLoad: 55,
-    contactIntensity: 48,
-    gameLoad: 52,
-    trendData: [40, 41, 42, 43, 42, 41, 42, 43, 42, 41, 42, 43, 42, 41, 42, 43, 42, 41, 42, 43],
-  },
-  {
-    id: "4",
-    name: "D'Angelo Russell",
-    position: "PG",
-    riskScore: 55,
-    riskClassification: "Moderate",
-    recommendedMinutes: 30,
-    currentMinutes: 32,
-    age: 28,
-    injuryHistory: {
-      count: 2,
-      lastInjury: "2023-10-05",
-      recoveryDays: [10, 14],
-    },
-    historicalLoad: 68,
-    contactIntensity: 55,
-    gameLoad: 62,
-    trendData: [53, 54, 55, 56, 55, 54, 55, 56, 55, 54, 55, 56, 55, 54, 55, 56, 55, 54, 55, 56],
-  },
-  {
-    id: "5",
-    name: "Rui Hachimura",
-    position: "PF",
-    riskScore: 48,
-    riskClassification: "Low",
-    recommendedMinutes: 28,
-    currentMinutes: 26,
-    age: 26,
-    injuryHistory: {
-      count: 2,
-      lastInjury: "2023-09-15",
-      recoveryDays: [12, 8],
-    },
-    historicalLoad: 58,
-    contactIntensity: 52,
-    gameLoad: 55,
-    trendData: [46, 47, 48, 49, 48, 47, 48, 49, 48, 47, 48, 49, 48, 47, 48, 49, 48, 47, 48, 49],
-  },
-]
+const featureLabels: Record<string, string> = {
+  MIN_ROLLING_10: "Minutes Load",
+  CONTACT_RATE: "Contact Rate",
+  AGE: "Age",
+  INJURY_COUNT: "Injury History",
+};
 
-export const riskTrendData: RiskTrendData[] = Array.from({ length: 20 }, (_, i) => ({
-  game: i + 1,
-  baselineRisk: 60 + Math.sin(i * 0.3) * 10 + Math.random() * 5,
-  dynamicRisk: 60 + Math.sin(i * 0.3) * 15 + Math.random() * 8,
-  minutes: 28 + Math.floor(Math.random() * 10),
-  scheduleStress: 1.0 + Math.random() * 0.5,
-  gameLoadScore: 50 + Math.random() * 30,
-}))
+const weights = rawWeights as {
+  coefficients: Record<string, number>;
+  features: string[];
+};
 
-export const scheduleStress: ScheduleStress = {
-  backToBack: true,
-  threeInFour: false,
-  roadTripLength: 3,
-  restDays: 1,
-  scheduleMultiplier: 1.35,
-}
+const rawImportances = weights.features.map((f) => ({
+  feature: featureLabels[f] ?? f,
+  rawImportance: Math.abs(weights.coefficients[f] ?? 0),
+}));
 
-export const videoAnalysis: VideoAnalysis = {
-  jumpCount: 127,
-  accelerationBursts: 89,
-  movementIntensityScore: 78,
-  contactProxyScore: 82,
-  gameLoadStressScore: 75,
-}
+const totalImportance = rawImportances.reduce(
+  (sum, r) => sum + r.rawImportance,
+  0
+);
 
-export const featureImportance: FeatureImportance[] = [
-  { feature: "Historical Load", importance: 28, percentage: 28 },
-  { feature: "Injury History Weight", importance: 22, percentage: 22 },
-  { feature: "Contact Intensity", importance: 18, percentage: 18 },
-  { feature: "Schedule Stress", importance: 15, percentage: 15 },
-  { feature: "Game Load", importance: 12, percentage: 12 },
-  { feature: "Age Factor", importance: 5, percentage: 5 },
-]
-
-export const teamAvailability = {
-  averageRisk: 57.6,
-  projectedAvailability: 85,
-  playoffReadiness: 78,
-}
+export const featureImportance: FeatureImportance[] = rawImportances
+  .map((r) => ({
+    feature: r.feature,
+    importance: parseFloat((r.rawImportance * 100).toFixed(2)),
+    percentage: parseFloat(
+      ((r.rawImportance / (totalImportance || 1)) * 100).toFixed(2)
+    ),
+  }))
+  .sort((a, b) => b.importance - a.importance);
