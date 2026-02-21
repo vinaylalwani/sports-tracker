@@ -6,6 +6,11 @@
       "year2": 32.0,
       "year3": 34.945205479452056
     },
+    "usageRate": {
+      "year1": 0,
+      "year2": 0,
+      "year3": 0
+    },
     "foulsDrawnPerGame": 4.157132266956231,
     "foulsCommittedPerGame": 1.8739489364071724,
     "contactRate": 6.031081203363404,
@@ -99,6 +104,11 @@
       "year2": 37.48571428571429,
       "year3": 35.32
     },
+    "usageRate": {
+      "year1": 0,
+      "year2": 0,
+      "year3": 0
+    },
     "foulsDrawnPerGame": 9.033621933621932,
     "foulsCommittedPerGame": 2.3879076479076478,
     "contactRate": 11.42152958152958,
@@ -174,6 +184,11 @@
       "year1": 35.527272727272724,
       "year2": 35.32394366197183,
       "year3": 34.957142857142856
+    },
+    "usageRate": {
+      "year1": 0,
+      "year2": 0,
+      "year3": 0
     },
     "foulsDrawnPerGame": 5.454722273032132,
     "foulsCommittedPerGame": 1.3709590878604965,
@@ -271,6 +286,11 @@
       "year2": 26.83823529411765,
       "year3": 31.627118644067796
     },
+    "usageRate": {
+      "year1": 0,
+      "year2": 0,
+      "year3": 0
+    },
     "foulsDrawnPerGame": 1.924910453823714,
     "foulsCommittedPerGame": 1.469270759151118,
     "contactRate": 3.394181212974832,
@@ -361,6 +381,11 @@
       "year1": 30.432835820895523,
       "year2": 32.41818181818182,
       "year3": 30.25
+    },
+    "usageRate": {
+      "year1": 0,
+      "year2": 0,
+      "year3": 0
     },
     "foulsDrawnPerGame": 1.9738127544097692,
     "foulsCommittedPerGame": 2.33921302578019,
