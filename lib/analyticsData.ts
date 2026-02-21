@@ -79,6 +79,62 @@ function getRiskContributions(features: {
     .map((c) => c.name);
 }
 
+export type RiskFeatures = {
+  MIN_ROLLING_10: number;
+  CONTACT_RATE: number;
+  AGE: number;
+  INJURY_COUNT: number;
+};
+
+/**
+ * Compute injury prediction from model features (same logic as analytics / injuryPredictions).
+ * Use this to drive player dashboard risk from the AI model.
+ */
+export function computePredictionFromFeatures(
+  features: RiskFeatures,
+  options?: { position?: string; usageRate?: number }
+): { predictedRisk: number; factors: string[]; recommendedAction: string } {
+  let predictedRisk = predictRisk(features);
+  const ageFactor = features.AGE > 32 ? (features.AGE - 32) * 2 : 0;
+  predictedRisk = Math.min(predictedRisk + ageFactor, 100);
+  predictedRisk = parseFloat(predictedRisk.toFixed(2));
+
+  const topDrivers = getRiskContributions(features);
+  const position = options?.position ?? "";
+  const usageRate = options?.usageRate ?? 0;
+
+  const factorLabels = topDrivers.map((driver) => {
+    switch (driver) {
+      case "MIN_ROLLING_10":
+        return usageRate > 0 ? `Usage: ${usageRate.toFixed(1)}%` : "Minutes load";
+      case "CONTACT_RATE":
+        if (position === "C" || position === "PF") return "High contact player";
+        return features.CONTACT_RATE > 8
+          ? "High contact player"
+          : features.CONTACT_RATE < 4
+          ? "Low contact player"
+          : "Moderate contact player";
+      case "AGE":
+        return features.AGE > 32 ? "Age factor" : "Prime age";
+      case "INJURY_COUNT":
+        return "Injury history";
+      default:
+        return driver;
+    }
+  });
+
+  return {
+    predictedRisk,
+    factors: factorLabels,
+    recommendedAction:
+      predictedRisk > 70
+        ? "Reduce minutes by 15%"
+        : predictedRisk > 50
+        ? "Monitor workload"
+        : "No restrictions",
+  };
+}
+
 /* ================================
    Interfaces
 ================================ */

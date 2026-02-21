@@ -1,9 +1,11 @@
 "use client"
 
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { LineChart, Line, ResponsiveContainer } from "recharts"
 import { Player } from "@/lib/mockData"
+import { cn } from "@/lib/utils"
 
 interface PlayerCardProps {
   player: Player
@@ -33,7 +35,16 @@ export function PlayerCard({ player }: PlayerCardProps) {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-lg">{player.name}</CardTitle>
+            <CardTitle className="text-lg">
+              <Link
+                href={`/players/${player.id}`}
+                className={cn(
+                  "hover:underline hover:text-[#FDB927] focus:outline-none focus:ring-2 focus:ring-[#FDB927] focus:ring-offset-2 focus:ring-offset-background rounded"
+                )}
+              >
+                {player.name}
+              </Link>
+            </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">{player.position}</p>
           </div>
           <Badge variant={getRiskBadgeVariant(player.riskClassification)}>
