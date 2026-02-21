@@ -176,9 +176,10 @@ export const injuryPredictions: InjuryPrediction[] = playerHistoryData.map((play
   const factorLabels = topDrivers.map((driver) => {
     switch (driver) {
       case "MIN_ROLLING_10":
-        return player.usageRate ? `Usage: ${player.usageRate}%` : "High workload";
+        // Use most recent season usage rate
+        const usage = player.usageRate?.year3 ?? 0; // fallback 0 if missing
+        return `Usage: ${usage.toFixed(1)}%`;
       case "CONTACT_RATE":
-        // Adjust by position: centers and forwards are naturally higher contact
         if (player.position === "C" || player.position === "PF") {
           return "High contact player";
         }
