@@ -29,6 +29,7 @@ def build_dataset():
         history = {
             "name": name,
             "minutesPerGame": {},
+            "usageRate": {"year1": 0, "year2": 0, "year3": 0},  # placeholder
             "foulsDrawnPerGame": 0,
             "foulsCommittedPerGame": 0,
             "contactRate": 0,
@@ -64,8 +65,12 @@ def build_dataset():
             df["INJURY_NEXT"] = (df["DAYS_BETWEEN"] > 10).astype(int)
             df["INJURY_COUNT"] = df["INJURY_NEXT"].rolling(20).sum().fillna(0)
 
+            # USG% placeholder
+            avg_usg = 0
+
             # Update player_history for JSON
             history["minutesPerGame"][f"year{i+1}"] = df["MIN"].mean()
+            history["usageRate"][f"year{i+1}"] = avg_usg
             history["foulsCommittedPerGame"] += df["PF"].mean()
             history["foulsDrawnPerGame"] += df["FTA"].mean()
 
@@ -73,7 +78,7 @@ def build_dataset():
                 if gap > 10:
                     history["injuries"].append({
                         "year": int(season.split("-")[0]),
-                        "category": "minor",  # simple default
+                        "category": "minor",
                         "gamesMissed": int(gap),
                         "recoveryDays": int(gap)
                     })
@@ -98,7 +103,7 @@ def build_dataset():
     else:
         print("❌ No game logs found for any player!")
 
-    # Save JSON for Next.js frontend
+    # Save JSON for frontend
     os.makedirs("../lib", exist_ok=True)
     with open("../lib/playerHistoryData.json", "w") as f:
         json.dump(player_history, f, indent=2)

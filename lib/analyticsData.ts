@@ -53,6 +53,33 @@ export function predictRisk(features: {
 }
 
 /* ================================
+   Feature Contributions
+================================ */
+function getRiskContributions(features: {
+  MIN_ROLLING_10: number;
+  CONTACT_RATE: number;
+  AGE: number;
+  INJURY_COUNT: number;
+}) {
+  const contributions: { name: string; value: number }[] = [];
+
+  for (let i = 0; i < weights.features.length; i++) {
+    const featureName = weights.features[i];
+    const coef = weights.coefficients[featureName];
+    if (!coef) continue;
+
+    const value = features[featureName as keyof typeof features];
+    const standardized = standardize(value, weights.scaler_mean[i], weights.scaler_scale[i]);
+    contributions.push({ name: featureName, value: Math.abs(coef * standardized) });
+  }
+
+  return contributions
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3)
+    .map((c) => c.name);
+}
+
+/* ================================
    Interfaces
 ================================ */
 export interface PlayerComparison {
@@ -80,7 +107,7 @@ export interface PerformanceTrend {
 }
 
 /* ================================
-   Baseline Risk (ML-based using rollingMin average)
+   Baseline Risk
 ================================ */
 export const baselineRiskData = playerHistoryData.map((player) => {
   const minRolling10 = player.rollingMin?.length
@@ -133,34 +160,46 @@ export const injuryPredictions: InjuryPrediction[] = playerHistoryData.map((play
     INJURY_COUNT: player.injuries.length,
   });
 
-  // Age adjustment for older players
+  // Age adjustment
   const ageFactor = player.age > 32 ? (player.age - 32) * 2 : 0;
   predictedRisk = Math.min(predictedRisk + ageFactor, 100);
-
-  // 🔥 Force 2 decimal places
   predictedRisk = parseFloat(predictedRisk.toFixed(2));
 
-  // 🔥 Add playstyle / performance context
-  let playStyleFactor = "";
+  // Top 3 drivers
+  const topDrivers = getRiskContributions({
+    MIN_ROLLING_10: minRolling10,
+    CONTACT_RATE: player.contactRate,
+    AGE: player.age,
+    INJURY_COUNT: player.injuries.length,
+  });
 
-  if (player.contactRate > 8) {
-    playStyleFactor = "High contact playstyle";
-  } else if (player.contactRate < 4) {
-    playStyleFactor = "Low contact perimeter playstyle";
-  } else {
-    playStyleFactor = "Balanced playstyle";
-  }
+  const factorLabels = topDrivers.map((driver) => {
+    switch (driver) {
+      case "MIN_ROLLING_10":
+        return player.usageRate ? `Usage: ${player.usageRate}%` : "High workload";
+      case "CONTACT_RATE":
+        // Adjust by position: centers and forwards are naturally higher contact
+        if (player.position === "C" || player.position === "PF") {
+          return "High contact player";
+        }
+        return player.contactRate > 8
+          ? "High contact player"
+          : player.contactRate < 4
+          ? "Low contact player"
+          : "Moderate contact player";
+      case "AGE":
+        return player.age > 32 ? "Age factor" : "Prime age";
+      case "INJURY_COUNT":
+        return "Injury History";
+      default:
+        return driver;
+    }
+  });
 
   return {
     player: player.name,
     predictedRisk,
-    factors: [
-      "Historical injury frequency",
-      "Recovery duration",
-      "Minutes load",
-      player.age > 32 ? "Age factor" : "Normal age profile",
-      playStyleFactor, // ✅ New factor added
-    ],
+    factors: factorLabels,
     recommendedAction:
       predictedRisk > 70
         ? "Reduce minutes by 15%"
@@ -171,7 +210,7 @@ export const injuryPredictions: InjuryPrediction[] = playerHistoryData.map((play
 });
 
 /* ================================
-   Performance Trends (game-by-game using rollingMin)
+   Performance Trends
 ================================ */
 export const performanceTrends: PerformanceTrend[] = playerHistoryData.flatMap((player) => {
   if (!player.rollingMin || player.rollingMin.length === 0) return [];
