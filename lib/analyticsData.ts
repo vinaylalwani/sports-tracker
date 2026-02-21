@@ -67,7 +67,6 @@ export interface PlayerComparison {
 export interface InjuryPrediction {
   player: string;
   predictedRisk: number;
-  confidence: number;
   factors: string[];
   recommendedAction: string;
 }
@@ -95,7 +94,10 @@ export const baselineRiskData = playerHistoryData.map((player) => {
     INJURY_COUNT: player.injuries.length,
   });
 
-  return { name: player.name, baselineRisk: risk };
+  return { 
+    name: player.name, 
+    baselineRisk: parseFloat(risk.toFixed(2)) 
+  };
 });
 
 /* ================================
@@ -131,19 +133,33 @@ export const injuryPredictions: InjuryPrediction[] = playerHistoryData.map((play
     INJURY_COUNT: player.injuries.length,
   });
 
-  // Age adjustment for older players (optional extra bump)
+  // Age adjustment for older players
   const ageFactor = player.age > 32 ? (player.age - 32) * 2 : 0;
   predictedRisk = Math.min(predictedRisk + ageFactor, 100);
+
+  // 🔥 Force 2 decimal places
+  predictedRisk = parseFloat(predictedRisk.toFixed(2));
+
+  // 🔥 Add playstyle / performance context
+  let playStyleFactor = "";
+
+  if (player.contactRate > 8) {
+    playStyleFactor = "High contact playstyle";
+  } else if (player.contactRate < 4) {
+    playStyleFactor = "Low contact perimeter playstyle";
+  } else {
+    playStyleFactor = "Balanced playstyle";
+  }
 
   return {
     player: player.name,
     predictedRisk,
-    confidence: 75 + Math.min(player.injuries.length * 3, 15),
     factors: [
       "Historical injury frequency",
       "Recovery duration",
       "Minutes load",
       player.age > 32 ? "Age factor" : "Normal age profile",
+      playStyleFactor, // ✅ New factor added
     ],
     recommendedAction:
       predictedRisk > 70
@@ -171,7 +187,7 @@ export const performanceTrends: PerformanceTrend[] = playerHistoryData.flatMap((
     return {
       player: player.name,
       date: new Date(2024, 0, i + 1).toISOString().split("T")[0],
-      riskScore: dailyRisk,
+      riskScore: parseFloat(dailyRisk.toFixed(2)),
       minutes: minVal,
       efficiency: 0.5 + (100 - dailyRisk) / 200,
     };

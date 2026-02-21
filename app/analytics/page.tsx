@@ -33,6 +33,18 @@ export default function AnalyticsPage() {
   const filteredTrends = selectedPlayer === "all" 
     ? performanceTrends 
     : performanceTrends // In real app, filter by player
+    
+    const getRiskColor = (risk: number) => {
+    if (risk < 45) return "text-green-500"
+    if (risk < 60) return "text-yellow-500"
+    return "text-red-500"
+  }
+
+  const getRiskBarColor = (risk: number) => {
+    if (risk < 45) return "bg-green-500"
+    if (risk < 60) return "bg-yellow-500"
+    return "bg-red-500"
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -79,15 +91,21 @@ export default function AnalyticsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Predicted Risk</span>
-                      <span className="text-2xl font-bold text-red-500">
-                        {prediction.predictedRisk}%
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Confidence</span>
-                      <span className="text-lg font-semibold">{prediction.confidence}%</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Risk Score</span>
+                        <span className={`text-2xl font-bold ${getRiskColor(prediction.predictedRisk)}`}>
+                          {prediction.predictedRisk}
+                        </span>
+                      </div>
+
+                      {/* Risk Meter Bar */}
+                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 ${getRiskBarColor(prediction.predictedRisk)}`}
+                          style={{ width: `${prediction.predictedRisk}%` }}
+                        />
+                      </div>
                     </div>
                     <div>
                       <p className="text-sm font-medium mb-2">Key Factors:</p>
