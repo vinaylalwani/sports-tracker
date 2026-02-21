@@ -15,9 +15,9 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <div className="flex h-full w-64 flex-col border-r border-border bg-card">
-      <div className="flex h-16 items-center border-b border-border px-6">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-[#552583] to-[#FDB927] bg-clip-text text-transparent">
+    <div className="flex h-full w-64 flex-col border-r border-border/80 bg-card/95">
+      <div className="flex h-16 items-center border-b border-border/80 px-6">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-[#6B3FA0] via-[#552583] to-[#E8B020] bg-clip-text text-transparent">
           Lakers Load Intelligence
         </h1>
       </div>
