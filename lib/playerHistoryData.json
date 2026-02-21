@@ -6,96 +6,31 @@
       "year2": 32.0,
       "year3": 34.945205479452056
     },
-    "usageRate": {
-      "year1": 12.0,
-      "year2": 13.3,
-      "year3": 14.6
-    },
     "foulsDrawnPerGame": 4.157132266956231,
     "foulsCommittedPerGame": 1.8739489364071724,
     "contactRate": 6.031081203363404,
     "injuries": [
       {
-        "year": 2022,
-        "category": "minor",
-        "gamesMissed": 34,
-        "recoveryDays": 34
+        "season": "2025-26",
+        "date": "2025-12-25",
+        "status": "Out",
+        "body_part": "Left Calf Strain"
       },
       {
-        "year": 2024,
-        "category": "minor",
-        "gamesMissed": 14,
-        "recoveryDays": 14
+        "season": "2025-26",
+        "date": "2025-11-15",
+        "status": "Out",
+        "body_part": "Groin Injury"
+      },
+      {
+        "season": "2025-26",
+        "date": "2025-12-05",
+        "status": "Out",
+        "body_part": "Minor Calf Injury"
       }
     ],
     "age": 26,
-    "position": "SG",
-    "rollingMin": [
-      36.8,
-      37.1,
-      36.7,
-      36.5,
-      36.7,
-      37.0,
-      36.9,
-      36.6,
-      36.5,
-      36.7,
-      36.3,
-      33.6,
-      34.0,
-      34.2,
-      33.9,
-      34.0,
-      32.8,
-      32.8,
-      32.4,
-      32.6,
-      33.0,
-      35.1,
-      34.2,
-      33.4,
-      33.5,
-      33.3,
-      34.5,
-      34.2,
-      34.6,
-      33.9,
-      34.0,
-      34.5,
-      34.9,
-      35.1,
-      35.8,
-      35.9,
-      35.6,
-      36.1,
-      36.8,
-      37.1,
-      37.1,
-      37.2,
-      37.4,
-      37.8,
-      36.7,
-      35.7,
-      35.2,
-      34.5,
-      33.4,
-      33.0,
-      32.6,
-      33.1,
-      32.8,
-      32.8,
-      33.1,
-      33.2,
-      33.6,
-      34.4,
-      34.6,
-      34.1,
-      34.6,
-      33.9,
-      34.4,
-      34.4
-    ]
+    "position": "SG"
   },
   {
     "name": "Luka Doncic",
@@ -104,79 +39,31 @@
       "year2": 37.48571428571429,
       "year3": 35.32
     },
-    "usageRate": {
-      "year1": 15.1,
-      "year2": 15.6,
-      "year3": 14.7
-    },
     "foulsDrawnPerGame": 9.033621933621932,
     "foulsCommittedPerGame": 2.3879076479076478,
     "contactRate": 11.42152958152958,
     "injuries": [
       {
-        "year": 2022,
-        "category": "minor",
-        "gamesMissed": 14,
-        "recoveryDays": 14
+        "season": "2025-26",
+        "date": "2026-02-01",
+        "status": "Out",
+        "body_part": "Left Hamstring Strain"
       },
       {
-        "year": 2024,
-        "category": "minor",
-        "gamesMissed": 12,
-        "recoveryDays": 12
+        "season": "2023-24",
+        "date": "2024-01-15",
+        "status": "Out",
+        "body_part": "Right Ankle Soreness"
       },
       {
-        "year": 2024,
-        "category": "minor",
-        "gamesMissed": 47,
-        "recoveryDays": 47
+        "season": "2022-23",
+        "date": "2023-05-01",
+        "status": "Questionable",
+        "body_part": "Minor ankle/thigh soreness"
       }
     ],
     "age": 26,
-    "position": "PG",
-    "rollingMin": [
-      36.3,
-      37.0,
-      36.4,
-      36.5,
-      36.2,
-      36.6,
-      36.4,
-      36.7,
-      36.6,
-      37.1,
-      36.7,
-      36.6,
-      36.9,
-      37.3,
-      37.4,
-      36.5,
-      36.2,
-      34.4,
-      33.1,
-      30.4,
-      30.0,
-      30.1,
-      30.6,
-      30.8,
-      30.5,
-      31.4,
-      31.7,
-      32.4,
-      32.8,
-      35.0,
-      36.1,
-      36.4,
-      36.6,
-      36.0,
-      37.0,
-      36.2,
-      36.4,
-      37.4,
-      37.9,
-      38.0,
-      37.5
-    ]
+    "position": "PG"
   },
   {
     "name": "LeBron James",
@@ -185,99 +72,41 @@
       "year2": 35.32394366197183,
       "year3": 34.957142857142856
     },
-    "usageRate": {
-      "year1": 14.8,
-      "year2": 14.7,
-      "year3": 14.6
-    },
     "foulsDrawnPerGame": 5.454722273032132,
     "foulsCommittedPerGame": 1.3709590878604965,
     "contactRate": 6.825681360892629,
     "injuries": [
       {
-        "year": 2022,
-        "category": "minor",
-        "gamesMissed": 16,
-        "recoveryDays": 16
+        "season": "2025-26",
+        "date": "2025-10-20",
+        "status": "Out",
+        "body_part": "Sciatica"
       },
       {
-        "year": 2022,
-        "category": "minor",
-        "gamesMissed": 28,
-        "recoveryDays": 28
+        "season": "2026-02-05",
+        "status": "Out",
+        "body_part": "Left Knee Soreness"
       },
       {
-        "year": 2024,
-        "category": "minor",
-        "gamesMissed": 14,
-        "recoveryDays": 14
+        "season": "2026-02-10",
+        "status": "Out",
+        "body_part": "Foot Injury"
+      },
+      {
+        "season": "2024-25",
+        "date": "2025-03-08",
+        "status": "Out",
+        "body_part": "Groin Strain"
+      },
+      {
+        "season": "2024-25",
+        "date": "2025-06-01",
+        "status": "Out",
+        "body_part": "Knee Ligament Injury"
       }
     ],
     "age": 40,
-    "position": "SF",
-    "rollingMin": [
-      35.2,
-      36.8,
-      36.3,
-      36.3,
-      37.3,
-      37.3,
-      36.9,
-      36.8,
-      36.8,
-      36.6,
-      36.1,
-      35.9,
-      36.6,
-      36.5,
-      35.0,
-      35.5,
-      35.0,
-      35.0,
-      34.0,
-      33.6,
-      33.9,
-      33.8,
-      33.1,
-      33.3,
-      33.9,
-      33.6,
-      34.3,
-      33.8,
-      34.6,
-      34.9,
-      34.3,
-      34.4,
-      34.7,
-      34.8,
-      34.8,
-      34.7,
-      34.3,
-      34.5,
-      35.3,
-      34.6,
-      34.7,
-      34.7,
-      34.7,
-      34.3,
-      34.3,
-      34.4,
-      34.7,
-      34.7,
-      34.1,
-      35.0,
-      35.6,
-      35.5,
-      35.5,
-      35.7,
-      36.2,
-      36.3,
-      35.5,
-      35.7,
-      35.4,
-      35.1,
-      34.9
-    ]
+    "position": "SF"
   },
   {
     "name": "Rui Hachimura",
@@ -286,94 +115,31 @@
       "year2": 26.83823529411765,
       "year3": 31.627118644067796
     },
-    "usageRate": {
-      "year1": 9.7,
-      "year2": 11.2,
-      "year3": 13.2
-    },
     "foulsDrawnPerGame": 1.924910453823714,
     "foulsCommittedPerGame": 1.469270759151118,
     "contactRate": 3.394181212974832,
     "injuries": [
       {
-        "year": 2022,
-        "category": "minor",
-        "gamesMissed": 34,
-        "recoveryDays": 34
+        "season": "2025-26",
+        "date": "2026-01-05",
+        "status": "Out",
+        "body_part": "Left Calf Strain"
       },
       {
-        "year": 2023,
-        "category": "minor",
-        "gamesMissed": 13,
-        "recoveryDays": 13
+        "season": "2025-26",
+        "date": "2025-12-28",
+        "status": "Out",
+        "body_part": "Right Groin Soreness"
       },
       {
-        "year": 2023,
-        "category": "minor",
-        "gamesMissed": 13,
-        "recoveryDays": 13
-      },
-      {
-        "year": 2024,
-        "category": "minor",
-        "gamesMissed": 23,
-        "recoveryDays": 23
+        "season": "2025-26",
+        "date": "2025-11-15",
+        "status": "Out",
+        "body_part": "Calf Injury"
       }
     ],
     "age": 27,
-    "position": "PF",
-    "rollingMin": [
-      28.3,
-      28.9,
-      28.7,
-      29.0,
-      29.5,
-      29.4,
-      29.5,
-      30.0,
-      31.5,
-      33.1,
-      35.1,
-      33.9,
-      32.7,
-      32.0,
-      30.7,
-      31.0,
-      31.3,
-      31.3,
-      30.4,
-      29.6,
-      28.6,
-      28.4,
-      28.3,
-      28.5,
-      29.3,
-      29.9,
-      29.6,
-      30.1,
-      30.8,
-      32.0,
-      33.1,
-      34.6,
-      36.4,
-      36.0,
-      35.5,
-      35.6,
-      35.7,
-      34.5,
-      33.1,
-      31.5,
-      31.2,
-      30.5,
-      29.7,
-      30.6,
-      31.0,
-      29.8,
-      29.9,
-      31.0,
-      32.6,
-      33.9
-    ]
+    "position": "PF"
   },
   {
     "name": "DeAndre Ayton",
@@ -382,86 +148,42 @@
       "year2": 32.41818181818182,
       "year3": 30.25
     },
-    "usageRate": {
-      "year1": 12.7,
-      "year2": 13.5,
-      "year3": 12.6
-    },
     "foulsDrawnPerGame": 1.9738127544097692,
     "foulsCommittedPerGame": 2.33921302578019,
     "contactRate": 4.313025780189959,
     "injuries": [
       {
-        "year": 2022,
-        "category": "minor",
-        "gamesMissed": 11,
-        "recoveryDays": 11
+        "season": "2025-26",
+        "date": "2025-11-24",
+        "status": "Out",
+        "body_part": "Right Knee Contusion"
       },
       {
-        "year": 2023,
-        "category": "minor",
-        "gamesMissed": 12,
-        "recoveryDays": 12
+        "season": "2025-26",
+        "date": "2025-12-17",
+        "status": "Out",
+        "body_part": "Elbow Injury"
       },
       {
-        "year": 2023,
-        "category": "minor",
-        "gamesMissed": 27,
-        "recoveryDays": 27
+        "season": "2025-26",
+        "date": "2026-01-16",
+        "status": "Out",
+        "body_part": "Knee Injury"
       },
       {
-        "year": 2023,
-        "category": "minor",
-        "gamesMissed": 11,
-        "recoveryDays": 11
+        "season": "2025-26",
+        "date": "2026-01-21",
+        "status": "Out",
+        "body_part": "Eye Injury"
       },
       {
-        "year": 2024,
-        "category": "minor",
-        "gamesMissed": 17,
-        "recoveryDays": 17
-      },
-      {
-        "year": 2024,
-        "category": "minor",
-        "gamesMissed": 11,
-        "recoveryDays": 11
+        "season": "2026-02-07",
+        "date": "2026-02-12",
+        "status": "Out",
+        "body_part": "Right Knee Soreness"
       }
     ],
     "age": 27,
-    "position": "C",
-    "rollingMin": [
-      31.9,
-      32.4,
-      31.6,
-      30.6,
-      31.1,
-      30.4,
-      30.5,
-      29.1,
-      28.7,
-      28.9,
-      28.6,
-      28.8,
-      29.3,
-      30.7,
-      31.5,
-      29.7,
-      29.6,
-      30.7,
-      31.8,
-      31.6,
-      30.3,
-      29.5,
-      29.7,
-      29.4,
-      28.9,
-      30.0,
-      30.1,
-      30.3,
-      29.3,
-      29.2,
-      30.2
-    ]
+    "position": "C"
   }
 ]

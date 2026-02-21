@@ -20,11 +20,6 @@ export interface PlayerHistory {
     year2: number;
     year3: number;
   };
-  usageRate: {        // New field
-    year1: number;
-    year2: number;
-    year3: number;
-  };
   foulsDrawnPerGame: number;
   foulsCommittedPerGame: number;
   contactRate: number;
