@@ -2,24 +2,22 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, BarChart3, Video, Calendar, Settings } from "lucide-react"
+import { LayoutDashboard, Video, Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Video Analysis", href: "/video", icon: Video },
   { name: "Schedule", href: "/schedule", icon: Calendar },
-  { name: "Settings", href: "/settings", icon: Settings },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <div className="flex h-full w-64 flex-col border-r border-border bg-card">
-      <div className="flex h-16 items-center border-b border-border px-6">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-[#552583] to-[#FDB927] bg-clip-text text-transparent">
+    <div className="flex h-full w-64 flex-col border-r border-border/80 bg-card/95">
+      <div className="flex h-16 items-center border-b border-border/80 px-6">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-[#6B3FA0] via-[#552583] to-[#E8B020] bg-clip-text text-transparent">
           Lakers Load Intelligence
         </h1>
       </div>
@@ -46,7 +44,7 @@ export function Sidebar() {
       <div className="border-t border-border p-4">
         <div className="text-xs text-muted-foreground">
           <div className="font-semibold text-foreground">Los Angeles Lakers</div>
-          <div className="mt-1">2023-24 Season</div>
+          <div className="mt-1">2025-26 Season</div>
         </div>
       </div>
     </div>

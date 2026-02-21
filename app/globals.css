@@ -4,26 +4,28 @@
 
 @layer base {
   :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 270 91% 25%;
-    --primary-foreground: 45 100% 51%;
-    --secondary: 45 100% 51%;
-    --secondary-foreground: 270 91% 25%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --background: 224 71% 6%;
+    --foreground: 213 31% 94%;
+    --card: 224 44% 11%;
+    --card-foreground: 213 31% 94%;
+    --popover: 224 44% 11%;
+    --popover-foreground: 213 31% 94%;
+    --primary: 271 76% 35%;
+    --primary-foreground: 45 93% 58%;
+    --secondary: 45 93% 58%;
+    --secondary-foreground: 271 76% 25%;
+    --muted: 223 32% 16%;
+    --muted-foreground: 215 20% 58%;
+    --accent: 223 32% 20%;
+    --accent-foreground: 213 31% 94%;
+    --destructive: 0 63% 42%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 270 91% 25%;
-    --radius: 1rem;
+    --border: 223 28% 22%;
+    --input: 223 28% 22%;
+    --ring: 45 93% 58%;
+    --radius: 0.75rem;
+    --lakers-gold: 45 93% 58%;
+    --lakers-purple: 271 76% 35%;
   }
 }
 
@@ -32,6 +34,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
 }

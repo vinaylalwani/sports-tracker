@@ -94,28 +94,20 @@ export interface NBAStats {
 }
 
 class NBAApi {
-  private baseUrl = "https://www.balldontlie.io/api/v1"
+  private baseUrl = "https://api.balldontlie.io/v1"
   private apiKey: string | null = null
 
   constructor() {
-    // API key is loaded from environment variables
-    // For client-side, we'll pass it through API routes
     this.apiKey = process.env.NBA_API_KEY || null
   }
 
   private getHeaders(): HeadersInit {
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     }
-    
-    // Add API key to headers if available
-    // Note: BALLDONTLIE free tier doesn't require auth, but some APIs do
     if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`
-      // Or if the API uses a different format:
-      // headers['X-API-Key'] = this.apiKey
+      headers["Authorization"] = this.apiKey
     }
-    
     return headers
   }
 
@@ -124,8 +116,6 @@ class NBAApi {
       let url = `${this.baseUrl}/players?per_page=100`
       if (teamId) url += `&team_ids[]=${teamId}`
       if (search) url += `&search=${encodeURIComponent(search)}`
-      // Add API key as query param if needed
-      if (this.apiKey) url += `&api_key=${this.apiKey}`
 
       const response = await fetch(url, {
         headers: this.getHeaders(),
@@ -144,13 +134,12 @@ class NBAApi {
     try {
       let url = `${this.baseUrl}/stats?player_ids[]=${playerId}&per_page=100`
       if (season) url += `&seasons[]=${season}`
-      if (this.apiKey) url += `&api_key=${this.apiKey}`
 
       const response = await fetch(url, {
         headers: this.getHeaders(),
       })
       if (!response.ok) throw new Error(`API error: ${response.status}`)
-      
+
       const data = await response.json()
       return data.data || []
     } catch (error) {
@@ -159,22 +148,34 @@ class NBAApi {
     }
   }
 
-  async getGames(teamId?: number, dates?: string[]): Promise<NBAGame[]> {
+  async getGames(options?: {
+    teamId?: number
+    dates?: string[]
+    seasons?: number[]
+    start_date?: string
+    end_date?: string
+  }): Promise<NBAGame[]> {
     try {
       let url = `${this.baseUrl}/games?per_page=100`
-      if (teamId) url += `&team_ids[]=${teamId}`
-      if (dates && dates.length > 0) {
-        dates.forEach(date => {
+      if (options?.teamId) url += `&team_ids[]=${options.teamId}`
+      if (options?.dates?.length) {
+        options.dates.forEach((date) => {
           url += `&dates[]=${date}`
         })
       }
-      if (this.apiKey) url += `&api_key=${this.apiKey}`
+      if (options?.seasons?.length) {
+        options.seasons.forEach((s) => {
+          url += `&seasons[]=${s}`
+        })
+      }
+      if (options?.start_date) url += `&start_date=${options.start_date}`
+      if (options?.end_date) url += `&end_date=${options.end_date}`
 
       const response = await fetch(url, {
         headers: this.getHeaders(),
       })
       if (!response.ok) throw new Error(`API error: ${response.status}`)
-      
+
       const data = await response.json()
       return data.data || []
     } catch (error) {
