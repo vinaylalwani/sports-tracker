@@ -13,10 +13,10 @@ SEASONS = {
 }
 
 TARGET_PLAYERS = [
-    {"name": "Austin Reaves", "id": 1630559, "position": "SG", "age": 26},
+    {"name": "Austin Reaves", "id": 1630559, "position": "SG", "age": 27},
     {"name": "Luka Doncic", "id": 1629029, "position": "PG", "age": 26},
-    {"name": "LeBron James", "id": 2544, "position": "SF", "age": 40},
-    {"name": "Rui Hachimura", "id": 1629060, "position": "PF", "age": 27},
+    {"name": "LeBron James", "id": 2544, "position": "SF", "age": 41},
+    {"name": "Rui Hachimura", "id": 1629060, "position": "PF", "age": 28},
     {"name": "DeAndre Ayton", "id": 1629028, "position": "C", "age": 27},
 ]
 
