@@ -4,7 +4,7 @@ numpy
 scikit-learn
 joblib
 nbainjuries
-mediapipe==0.10.11
+mediapipe==0.10.14
 opencv-python
 numpy
 pandas
@@ -12,3 +12,6 @@ scikit-learn
 joblib
 setuptools
 wheel
+scipy
+ultralytics
+certifi
