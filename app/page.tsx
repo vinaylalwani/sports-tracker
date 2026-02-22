@@ -26,11 +26,12 @@ export default function Dashboard() {
     updatePlayerRisk(playerId, videoRisk, player.riskScore)
   }
 
+  // Merge video-adjusted risk scores into player objects for display
   const displayPlayers = players.map((p) => {
     const combined = videoCombinedRisks[p.id]
     if (combined == null) return p
-    const riskScore = Math.max(0, Math.min(100, combined))
-    const riskClassification =
+    const riskScore = parseFloat(Math.max(0, Math.min(100, combined)).toFixed(2))
+    const riskClassification: "Low" | "Moderate" | "High" =
       riskScore < 45 ? "Low" : riskScore < 65 ? "Moderate" : "High"
     const rec =
       riskScore >= 85 ? p.currentMinutes * 0.8
@@ -38,7 +39,12 @@ export default function Dashboard() {
       : riskScore >= 65 ? p.currentMinutes * 0.9
       : riskScore >= 55 ? p.currentMinutes * 0.95
       : p.currentMinutes
-    return { ...p, riskScore, riskClassification, recommendedMinutes: parseFloat(rec.toFixed(2)) }
+    return {
+      ...p,
+      riskScore,
+      riskClassification,
+      recommendedMinutes: parseFloat(rec.toFixed(2)),
+    }
   })
 
   return (
@@ -65,7 +71,7 @@ export default function Dashboard() {
             <RiskTrendChart data={riskTrendData} />
 
             {/* Video Analysis and Schedule Stress */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <VideoAnalysisPanel
                 dashboardPlayers={players.map((p) => ({ id: p.id, name: p.name }))}
                 onAssignToPlayer={handleAssignToPlayer}

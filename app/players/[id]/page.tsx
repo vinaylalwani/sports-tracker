@@ -21,6 +21,7 @@ import {
   Legend,
   Cell,
   ReferenceLine,
+  LabelList,
 } from "recharts"
 import { players } from "@/lib/mockData"
 import { injuryPredictions, performanceTrends } from "@/lib/analyticsData"
@@ -91,14 +92,16 @@ export default function PlayerPage() {
   // Injury history
   const injuries = history?.injuries ?? []
 
-  // Benchmark comparison: this player vs all teammates
-  const benchmarkData = players.map((p) => ({
-    name: p.name.split(" ").pop() ?? p.name,
-    fullName: p.name,
-    riskScore: parseFloat(p.riskScore.toFixed(2)),
-    minutes: parseFloat(p.currentMinutes.toFixed(2)),
-    isCurrent: p.id === player.id,
-  }))
+  // Benchmark comparison: this player vs all teammates — sorted by risk descending for horizontal bars
+  const benchmarkData = players
+    .map((p) => ({
+      name: p.name.split(" ").pop() ?? p.name,
+      fullName: p.name,
+      riskScore: parseFloat(p.riskScore.toFixed(2)),
+      minutes: parseFloat(p.currentMinutes.toFixed(2)),
+      isCurrent: p.id === player.id,
+    }))
+    .sort((a, b) => b.riskScore - a.riskScore)
 
   // Risk vs Minutes scatter data (team view)
   const scatterData = players.map((p) => ({
@@ -279,7 +282,7 @@ export default function PlayerPage() {
           </Card>
         </div>
 
-        {/* Benchmark Comparison: player vs teammates */}
+        {/* Benchmark Comparison: player vs teammates — horizontal bar chart */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -288,11 +291,26 @@ export default function PlayerPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={benchmarkData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 12 }} />
-                <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
+            <ResponsiveContainer width="100%" height={Math.max(300, benchmarkData.length * 44)}>
+              <BarChart
+                data={benchmarkData}
+                layout="vertical"
+                margin={{ top: 5, right: 60, left: 10, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" horizontal={false} />
+                <XAxis
+                  type="number"
+                  domain={[0, 100]}
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 13, fontWeight: 500 }}
+                  width={90}
+                />
                 <Tooltip
                   content={({ active, payload }: any) => {
                     if (active && payload?.length) {
@@ -308,26 +326,32 @@ export default function PlayerPage() {
                     return null
                   }}
                 />
-                <Bar dataKey="riskScore" radius={[4, 4, 0, 0]} name="Risk Score">
+                <Bar dataKey="riskScore" radius={[0, 6, 6, 0]} name="Risk Score" barSize={28}>
                   {benchmarkData.map((entry, index) => (
                     <Cell
                       key={index}
-                      fill={entry.isCurrent ? "#FDB927" : "#552583"}
-                      opacity={entry.isCurrent ? 1 : 0.6}
-                      stroke={entry.isCurrent ? "#FDB927" : "none"}
+                      fill={entry.isCurrent ? "#552583" : "#FDB927"}
+                      opacity={entry.isCurrent ? 1 : 0.75}
+                      stroke={entry.isCurrent ? "#552583" : "none"}
                       strokeWidth={entry.isCurrent ? 2 : 0}
                     />
                   ))}
+                  <LabelList
+                    dataKey="riskScore"
+                    position="right"
+                    formatter={(v: number) => `${v.toFixed(1)}%`}
+                    style={{ fill: "hsl(var(--muted-foreground))", fontSize: 12, fontWeight: 600 }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
             <div className="flex justify-center gap-6 mt-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded" style={{ backgroundColor: "#FDB927" }} />
+                <span className="h-3 w-3 rounded" style={{ backgroundColor: "#552583" }} />
                 {player.name} (You)
               </span>
               <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded" style={{ backgroundColor: "#552583", opacity: 0.6 }} />
+                <span className="h-3 w-3 rounded" style={{ backgroundColor: "#FDB927", opacity: 0.75 }} />
                 Teammates
               </span>
             </div>
@@ -343,23 +367,29 @@ export default function PlayerPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={350}>
-              <ScatterChart margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+            <ResponsiveContainer width="100%" height={380}>
+              <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
                 <XAxis
                   dataKey="minutes"
                   name="Minutes"
+                  type="number"
                   stroke="hsl(var(--muted-foreground))"
-                  label={{ value: "Minutes Per Game", position: "insideBottom", offset: -5, style: { fill: "hsl(var(--muted-foreground))" } }}
+                  tick={{ fontSize: 12 }}
+                  label={{ value: "Minutes Per Game", position: "insideBottom", offset: -15, style: { fill: "hsl(var(--muted-foreground))", fontSize: 12 } }}
+                  domain={["dataMin - 3", "dataMax + 3"]}
                 />
                 <YAxis
                   dataKey="risk"
                   name="Risk"
+                  type="number"
                   stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
                   domain={[0, 100]}
-                  label={{ value: "Risk Score", angle: -90, position: "insideLeft", style: { fill: "hsl(var(--muted-foreground))" } }}
+                  label={{ value: "Risk Score", angle: -90, position: "insideLeft", offset: -5, style: { fill: "hsl(var(--muted-foreground))", fontSize: 12 } }}
                 />
                 <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
                   content={({ active, payload }: any) => {
                     if (active && payload?.length) {
                       const d = payload[0].payload
@@ -374,32 +404,31 @@ export default function PlayerPage() {
                     return null
                   }}
                 />
-                {/* Teammates */}
                 <Scatter
                   data={scatterData.filter((d) => !d.isCurrent)}
                   fill="#552583"
-                  opacity={0.6}
+                  opacity={0.7}
                   name="Teammates"
-                >
-                  {scatterData
-                    .filter((d) => !d.isCurrent)
-                    .map((_, i) => (
-                      <Cell key={i} r={6} />
-                    ))}
-                </Scatter>
-                {/* Current player — highlighted */}
+                />
                 <Scatter
                   data={scatterData.filter((d) => d.isCurrent)}
                   fill="#FDB927"
                   name={player.name}
-                >
-                  {scatterData
-                    .filter((d) => d.isCurrent)
-                    .map((_, i) => (
-                      <Cell key={i} r={10} stroke="#FDB927" strokeWidth={3} />
-                    ))}
-                </Scatter>
-                <Legend />
+                  shape={(props: any) => {
+                    const { cx, cy } = props
+                    return (
+                      <g>
+                        <circle cx={cx} cy={cy} r={10} fill="#FDB927" stroke="#FDB927" strokeWidth={3} opacity={0.9} />
+                        <circle cx={cx} cy={cy} r={16} fill="none" stroke="#FDB927" strokeWidth={1.5} opacity={0.4} />
+                      </g>
+                    )
+                  }}
+                />
+                <Legend
+                  verticalAlign="top"
+                  align="right"
+                  wrapperStyle={{ paddingBottom: 10 }}
+                />
               </ScatterChart>
             </ResponsiveContainer>
           </CardContent>

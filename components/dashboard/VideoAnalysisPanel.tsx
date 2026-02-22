@@ -187,7 +187,7 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete, dashboa
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
-  // Draw bounding boxes on canvas during analysis and results (yellow = selected, green = others)
+  // Draw bounding boxes on canvas during analysis and results (green = all players)
   const showTrackingOverlay = (step === "analyzing" || step === "results") && trackingData?.frames?.length && trackingData.frame_size
 
   useEffect(() => {
@@ -231,9 +231,8 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete, dashboa
 
       for (const p of best.players) {
         const { x1, y1, x2, y2 } = p.bbox
-        const isSelected = p.is_selected === true
-        ctx.strokeStyle = isSelected ? "#FDB927" : "#22c55e"
-        ctx.lineWidth = isSelected ? 3 : 2
+        ctx.strokeStyle = "#22c55e"
+        ctx.lineWidth = p.is_selected ? 3 : 2
         ctx.strokeRect(ox + x1 * scale, oy + y1 * scale, (x2 - x1) * scale, (y2 - y1) * scale)
       }
     }
