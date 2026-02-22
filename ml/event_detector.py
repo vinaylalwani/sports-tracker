@@ -3,17 +3,33 @@ Detects athletic events from pose keypoint sequences:
   - Jumps (vertical displacement of hips)
   - Velocity (center-of-mass displacement per frame)
   - Contact approximation (sudden deceleration / jerk)
+  - Serious injury indicators (collapse, hyperextension, post-impact stillness)
 """
 
 import numpy as np
 from scipy.signal import find_peaks
 
 LEFT_HIP, RIGHT_HIP = 23, 24
+LEFT_KNEE, RIGHT_KNEE = 25, 26
 LEFT_ANKLE, RIGHT_ANKLE = 27, 28
+LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
+LEFT_ELBOW, RIGHT_ELBOW = 13, 14
+LEFT_WRIST, RIGHT_WRIST = 15, 16
 
 
 def _midpoint(kp, idx_a, idx_b):
     return (kp[idx_a][:2] + kp[idx_b][:2]) / 2.0
+
+
+def _angle_between(a, b, c):
+    """Angle at point b formed by points a-b-c, using x,y only."""
+    a = np.array(a[:2])
+    b = np.array(b[:2])
+    c = np.array(c[:2])
+    ba = a - b
+    bc = c - b
+    cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
+    return np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0)))
 
 
 def compute_center_of_mass(keypoints_sequence):
@@ -137,3 +153,232 @@ def compute_ankle_ground_proximity(keypoints_sequence, effective_fps, ground_thr
         }
         for i, kp in enumerate(keypoints_sequence)
     ]
+
+
+# ============================================================
+# SERIOUS INJURY INDICATORS
+# ============================================================
+
+def detect_body_collapse(keypoints_sequence, effective_fps):
+    """
+    Detect sudden drops in shoulder/hip height indicating a player
+    falling or collapsing (e.g., after a hard foul, ankle roll, knee buckle).
+    
+    A collapse = rapid downward movement of both shoulders and hips
+    over a short window (2-4 frames).
+    """
+    if len(keypoints_sequence) < 5:
+        return []
+
+    shoulder_y = []
+    hip_y = []
+    for kp in keypoints_sequence:
+        mid_s = _midpoint(kp, LEFT_SHOULDER, RIGHT_SHOULDER)
+        mid_h = _midpoint(kp, LEFT_HIP, RIGHT_HIP)
+        shoulder_y.append(mid_s[1])
+        hip_y.append(mid_h[1])
+
+    shoulder_y = np.array(shoulder_y)
+    hip_y = np.array(hip_y)
+
+    # Body height = distance between shoulders and hips (should stay roughly constant)
+    body_height = np.abs(shoulder_y - hip_y)
+
+    # Rate of downward movement (positive = moving down in image coords)
+    dt = 1.0 / effective_fps
+    shoulder_vel = np.diff(shoulder_y) / dt  # positive = falling
+    hip_vel = np.diff(hip_y) / dt
+
+    # Collapse = both shoulders AND hips moving down rapidly
+    combined_fall_rate = (shoulder_vel + hip_vel) / 2.0
+
+    # Also detect body height compression (crumpling)
+    height_change = np.diff(body_height) / dt
+
+    # Thresholds (adaptive)
+    fall_threshold = float(np.mean(np.abs(combined_fall_rate)) + 3.0 * np.std(np.abs(combined_fall_rate)))
+    fall_threshold = max(fall_threshold, 0.3)  # minimum absolute threshold
+
+    collapse_events = []
+    min_gap = max(2, int(effective_fps * 0.5))
+
+    for i in range(len(combined_fall_rate)):
+        is_falling = combined_fall_rate[i] > fall_threshold
+        # Also check if body is compressing (height shrinking)
+        is_compressing = i < len(height_change) and height_change[i] < -fall_threshold * 0.3
+
+        if is_falling or (is_falling and is_compressing):
+            # Check it's not too close to a previous event
+            if collapse_events and (i - collapse_events[-1]["frame_seq_idx"]) < min_gap:
+                continue
+
+            # Look ahead: does the player stay down? (sustained low position)
+            look_ahead = min(i + int(effective_fps * 1.0), len(shoulder_y))
+            stayed_down = False
+            if look_ahead > i + 2:
+                post_shoulder = np.mean(shoulder_y[i+1:look_ahead])
+                pre_shoulder = np.mean(shoulder_y[max(0, i-3):i])
+                if post_shoulder > pre_shoulder + 0.02:  # stayed lower
+                    stayed_down = True
+
+            severity = "critical" if (is_compressing and stayed_down) else "high" if stayed_down else "moderate"
+
+            collapse_events.append({
+                "frame_seq_idx": int(i),
+                "timestamp": round(float(i / effective_fps), 3),
+                "fall_rate": round(float(combined_fall_rate[i]), 4),
+                "stayed_down": stayed_down,
+                "severity": severity,
+                "type": "collapse",
+            })
+
+    return collapse_events
+
+
+def detect_hyperextension(keypoints_sequence, effective_fps):
+    """
+    Detect dangerous limb angles that suggest hyperextension:
+    - Knee angle > 185° (hyperextended knee — very dangerous)
+    - Knee angle < 60° under rapid change (buckling)
+    - Sudden large angle changes in a single frame
+    """
+    if len(keypoints_sequence) < 3:
+        return []
+
+    events = []
+    prev_lk = None
+    prev_rk = None
+    min_gap = max(2, int(effective_fps * 0.3))
+
+    for i, kp in enumerate(keypoints_sequence):
+        lk = _angle_between(kp[LEFT_HIP], kp[LEFT_KNEE], kp[LEFT_ANKLE])
+        rk = _angle_between(kp[RIGHT_HIP], kp[RIGHT_KNEE], kp[RIGHT_ANKLE])
+
+        flags = []
+
+        # Hyperextension (angle > 185 in 2D can manifest as very straight + slight reverse)
+        # In practice with normalized coords, near-180 with high velocity change = risky
+        if lk > 175 or rk > 175:
+            flags.append("near_hyperextension")
+
+        # Buckling (very acute angle)
+        if lk < 55 or rk < 55:
+            flags.append("severe_flexion")
+
+        # Sudden angle change (whiplash-like)
+        if prev_lk is not None:
+            lk_delta = abs(lk - prev_lk)
+            rk_delta = abs(rk - prev_rk)
+            max_delta = max(lk_delta, rk_delta)
+
+            if max_delta > 40:
+                flags.append("rapid_angle_change")
+            elif max_delta > 25:
+                flags.append("moderate_angle_change")
+
+        if flags:
+            if not events or (i - events[-1]["frame_seq_idx"]) >= min_gap:
+                worst_angle = min(lk, rk)
+                severity = "critical" if "severe_flexion" in flags or ("near_hyperextension" in flags and "rapid_angle_change" in flags) else \
+                           "high" if "rapid_angle_change" in flags or "near_hyperextension" in flags else "moderate"
+
+                events.append({
+                    "frame_seq_idx": int(i),
+                    "timestamp": round(float(i / effective_fps), 3),
+                    "left_knee_angle": round(float(lk), 1),
+                    "right_knee_angle": round(float(rk), 1),
+                    "angle_delta": round(float(max(abs(lk - (prev_lk or lk)), abs(rk - (prev_rk or rk)))), 1),
+                    "flags": flags,
+                    "severity": severity,
+                    "type": "hyperextension",
+                })
+
+        prev_lk = lk
+        prev_rk = rk
+
+    return events
+
+
+def detect_post_impact_stillness(keypoints_sequence, effective_fps, contact_events):
+    """
+    After a contact event, check if the player becomes unusually still.
+    Stillness after hard impact = potential serious injury (concussion, fracture, etc.)
+    
+    Checks a 1-2 second window after each high/medium contact for near-zero movement.
+    """
+    if not contact_events or len(keypoints_sequence) < 5:
+        return []
+
+    coms = compute_center_of_mass(keypoints_sequence)
+    dt = 1.0 / effective_fps
+    speeds = np.linalg.norm(np.diff(coms, axis=0), axis=1) / dt if len(coms) > 1 else np.array([])
+
+    if len(speeds) == 0:
+        return []
+
+    baseline_speed = float(np.median(speeds))
+    stillness_threshold = max(baseline_speed * 0.15, 0.01)  # 15% of median or min 0.01
+
+    stillness_events = []
+
+    for ce in contact_events:
+        if ce.get("severity") not in ("high", "medium"):
+            continue
+
+        impact_idx = ce["frame_seq_idx"]
+        # Check 0.5s to 2s after impact
+        start = impact_idx + max(1, int(effective_fps * 0.3))
+        end = min(impact_idx + int(effective_fps * 2.0), len(speeds))
+
+        if start >= end or end - start < 3:
+            continue
+
+        post_speeds = speeds[start:end]
+        avg_post_speed = float(np.mean(post_speeds))
+        min_post_speed = float(np.min(post_speeds))
+        still_frames = int(np.sum(post_speeds < stillness_threshold))
+        still_ratio = still_frames / len(post_speeds)
+
+        if still_ratio > 0.5 or avg_post_speed < stillness_threshold:
+            severity = "critical" if still_ratio > 0.8 else "high" if still_ratio > 0.6 else "moderate"
+
+            stillness_events.append({
+                "frame_seq_idx": int(start),
+                "timestamp": round(float(start / effective_fps), 3),
+                "duration_seconds": round(float((end - start) / effective_fps), 2),
+                "still_ratio": round(still_ratio, 2),
+                "avg_speed_post_impact": round(avg_post_speed, 4),
+                "related_contact_timestamp": ce["timestamp"],
+                "severity": severity,
+                "type": "post_impact_stillness",
+            })
+
+    return stillness_events
+
+
+def detect_injury_indicators(keypoints_sequence, effective_fps, contact_events):
+    """
+    Master function: runs all serious injury detectors and returns combined results.
+    """
+    collapses = detect_body_collapse(keypoints_sequence, effective_fps)
+    hyperextensions = detect_hyperextension(keypoints_sequence, effective_fps)
+    stillness = detect_post_impact_stillness(keypoints_sequence, effective_fps, contact_events)
+
+    all_indicators = collapses + hyperextensions + stillness
+    # Sort by timestamp
+    all_indicators.sort(key=lambda x: x["timestamp"])
+
+    # Summary
+    critical_count = sum(1 for e in all_indicators if e.get("severity") == "critical")
+    high_count = sum(1 for e in all_indicators if e.get("severity") == "high")
+
+    return {
+        "indicators": all_indicators,
+        "collapse_count": len(collapses),
+        "hyperextension_count": len(hyperextensions),
+        "stillness_count": len(stillness),
+        "critical_count": critical_count,
+        "high_count": high_count,
+        "total_count": len(all_indicators),
+        "has_serious_flags": critical_count > 0 or high_count >= 2,
+    }

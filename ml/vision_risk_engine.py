@@ -12,21 +12,27 @@ def _clamp(val, lo=0, hi=100):
     return max(lo, min(hi, val))
 
 
-def compute_vision_risk(features, jump_data, velocity_data, contact_data):
+def compute_vision_risk(features, jump_data, velocity_data, contact_data, injury_indicators=None):
     """
     Args:
         features: biomechanics summary dict
         jump_data: dict with jump_count, jump_events
         velocity_data: dict with velocity_stats, velocity_timeline
         contact_data: dict with contact_count, contact_events
+        injury_indicators: dict from detect_injury_indicators (optional)
     Returns:
         Structured risk assessment dict
     """
+    if injury_indicators is None:
+        injury_indicators = {"total_count": 0, "critical_count": 0, "high_count": 0,
+                             "collapse_count": 0, "hyperextension_count": 0,
+                             "stillness_count": 0, "has_serious_flags": False, "indicators": []}
+
     risk_factors = []
     total_weight = 0
     weighted_risk = 0
 
-    # --- 1. Knee flexion risk (weight: 20) ---
+    # --- 1. Knee flexion risk (weight: 15) ---
     knee_risk = 0
     avg_knee = features.get("avg_knee_angle", 180)
     min_knee = features.get("min_knee_angle", 180)
@@ -42,19 +48,17 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
 
     knee_var = features.get("knee_variability", 0)
     knee_risk += min(20, knee_var * 0.8)
-
     knee_risk = _clamp(knee_risk)
+
     risk_factors.append({
-        "factor": "knee_flexion",
-        "label": "Knee Flexion Risk",
-        "score": round(knee_risk, 1),
-        "weight": 20,
+        "factor": "knee_flexion", "label": "Knee Flexion Risk",
+        "score": round(knee_risk, 1), "weight": 15,
         "details": f"Avg knee angle: {avg_knee}°, Min: {min_knee}°, Variability: {knee_var:.1f}°",
     })
-    weighted_risk += knee_risk * 20
-    total_weight += 20
+    weighted_risk += knee_risk * 15
+    total_weight += 15
 
-    # --- 2. Hip control risk (weight: 15) ---
+    # --- 2. Hip control risk (weight: 10) ---
     hip_risk = 0
     avg_hip = features.get("avg_hip_angle", 180)
     min_hip = features.get("min_hip_angle", 180)
@@ -70,17 +74,15 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
 
     hip_var = features.get("hip_variability", 0)
     hip_risk += min(15, hip_var * 0.6)
-
     hip_risk = _clamp(hip_risk)
+
     risk_factors.append({
-        "factor": "hip_control",
-        "label": "Hip Control Risk",
-        "score": round(hip_risk, 1),
-        "weight": 15,
+        "factor": "hip_control", "label": "Hip Control Risk",
+        "score": round(hip_risk, 1), "weight": 10,
         "details": f"Avg hip angle: {avg_hip}°, Min: {min_hip}°, Variability: {hip_var:.1f}°",
     })
-    weighted_risk += hip_risk * 15
-    total_weight += 15
+    weighted_risk += hip_risk * 10
+    total_weight += 10
 
     # --- 3. Trunk stability risk (weight: 10) ---
     trunk_risk = 0
@@ -98,16 +100,14 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
 
     trunk_risk = _clamp(trunk_risk)
     risk_factors.append({
-        "factor": "trunk_stability",
-        "label": "Trunk Stability Risk",
-        "score": round(trunk_risk, 1),
-        "weight": 10,
+        "factor": "trunk_stability", "label": "Trunk Stability Risk",
+        "score": round(trunk_risk, 1), "weight": 10,
         "details": f"Avg trunk lean: {avg_trunk:.1f}°, Max: {max_trunk:.1f}°",
     })
     weighted_risk += trunk_risk * 10
     total_weight += 10
 
-    # --- 4. Knee symmetry risk (weight: 10) ---
+    # --- 4. Knee symmetry risk (weight: 5) ---
     sym_risk = 0
     avg_sym = features.get("avg_knee_symmetry_diff", 0)
     max_sym = features.get("max_knee_symmetry_diff", 0)
@@ -123,16 +123,14 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
 
     sym_risk = _clamp(sym_risk)
     risk_factors.append({
-        "factor": "knee_symmetry",
-        "label": "Bilateral Symmetry Risk",
-        "score": round(sym_risk, 1),
-        "weight": 10,
+        "factor": "knee_symmetry", "label": "Bilateral Symmetry Risk",
+        "score": round(sym_risk, 1), "weight": 5,
         "details": f"Avg knee diff: {avg_sym:.1f}°, Max: {max_sym:.1f}°",
     })
-    weighted_risk += sym_risk * 10
-    total_weight += 10
+    weighted_risk += sym_risk * 5
+    total_weight += 5
 
-    # --- 5. Jump load risk (weight: 20) ---
+    # --- 5. Jump load risk (weight: 15) ---
     jump_count = jump_data.get("jump_count", 0)
     jump_events = jump_data.get("jump_events", [])
 
@@ -155,23 +153,20 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
 
     jump_risk = _clamp(jump_risk)
     risk_factors.append({
-        "factor": "jump_load",
-        "label": "Jump Load Risk",
-        "score": round(jump_risk, 1),
-        "weight": 20,
+        "factor": "jump_load", "label": "Jump Load Risk",
+        "score": round(jump_risk, 1), "weight": 15,
         "details": f"Jump count: {jump_count}, Max height (norm): {max(e['jump_height_norm'] for e in jump_events) if jump_events else 0:.3f}",
     })
-    weighted_risk += jump_risk * 20
-    total_weight += 20
+    weighted_risk += jump_risk * 15
+    total_weight += 15
 
-    # --- 6. Contact/collision risk (weight: 25 — highest weight) ---
+    # --- 6. Contact/collision risk (weight: 25) ---
     contact_count = contact_data.get("contact_count", 0)
     contact_events = contact_data.get("contact_events", [])
 
     high_severity = sum(1 for e in contact_events if e.get("severity") == "high")
     medium_severity = sum(1 for e in contact_events if e.get("severity") == "medium")
 
-    # Base risk from count
     contact_risk = 0
     if contact_count > 10:
         contact_risk = 55
@@ -182,22 +177,17 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
     elif contact_count > 0:
         contact_risk = 8
 
-    # Hard contacts escalate significantly
     contact_risk += high_severity * 15
     contact_risk += medium_severity * 5
 
-    # Peak deceleration bonus: if any single event has very high decel, spike the risk
     if contact_events:
         max_decel = max(e.get("deceleration", 0) for e in contact_events)
         max_jerk = max(e.get("jerk", 0) for e in contact_events)
-        # Adaptive: if peak decel is >2x the mean, it's a hard hit
         mean_decel = sum(e.get("deceleration", 0) for e in contact_events) / len(contact_events)
         if mean_decel > 0 and max_decel > mean_decel * 2.5:
             contact_risk += 20
         elif mean_decel > 0 and max_decel > mean_decel * 1.8:
             contact_risk += 10
-
-        # Very high absolute jerk = violent collision
         if max_jerk > 50:
             contact_risk += 15
         elif max_jerk > 25:
@@ -205,17 +195,67 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
 
     contact_risk = _clamp(contact_risk)
     risk_factors.append({
-        "factor": "contact",
-        "label": "Contact/Collision Risk",
-        "score": round(contact_risk, 1),
-        "weight": 25,
+        "factor": "contact", "label": "Contact/Collision Risk",
+        "score": round(contact_risk, 1), "weight": 25,
         "details": f"Contact events: {contact_count}, High severity: {high_severity}, Medium: {medium_severity}",
     })
     weighted_risk += contact_risk * 25
     total_weight += 25
 
+    # --- 7. Serious Injury Indicators (weight: 20) ---
+    injury_risk = 0
+    critical = injury_indicators.get("critical_count", 0)
+    high_inj = injury_indicators.get("high_count", 0)
+    collapses = injury_indicators.get("collapse_count", 0)
+    hyperext = injury_indicators.get("hyperextension_count", 0)
+    stillness = injury_indicators.get("stillness_count", 0)
+
+    # Critical events are extremely concerning
+    injury_risk += critical * 30
+    injury_risk += high_inj * 15
+
+    # Specific patterns
+    if collapses > 0:
+        injury_risk += 20
+    if stillness > 0:
+        injury_risk += 25  # player stopped moving after impact
+    if hyperext > 0:
+        injury_risk += 15
+
+    # Combination multiplier: collapse + stillness together = very bad
+    if collapses > 0 and stillness > 0:
+        injury_risk += 20
+
+    injury_risk = _clamp(injury_risk)
+
+    detail_parts = []
+    if collapses > 0:
+        detail_parts.append(f"Collapses: {collapses}")
+    if hyperext > 0:
+        detail_parts.append(f"Hyperextensions: {hyperext}")
+    if stillness > 0:
+        detail_parts.append(f"Post-impact stillness: {stillness}")
+    if critical > 0:
+        detail_parts.append(f"Critical flags: {critical}")
+    detail_str = ", ".join(detail_parts) if detail_parts else "No serious indicators detected"
+
+    risk_factors.append({
+        "factor": "injury_indicators", "label": "Serious Injury Indicators",
+        "score": round(injury_risk, 1), "weight": 20,
+        "details": detail_str,
+    })
+    weighted_risk += injury_risk * 20
+    total_weight += 20
+
     # --- Overall score ---
     overall = round(weighted_risk / total_weight, 1) if total_weight > 0 else 0
+
+    # Emergency boost: if serious flags detected, floor the risk score
+    if injury_indicators.get("has_serious_flags", False):
+        overall = max(overall, 65)  # minimum 65 if serious injury signals present
+    if critical > 0:
+        overall = max(overall, 75)  # minimum 75 if critical
+
     overall = _clamp(overall)
 
     if overall >= 70:
@@ -231,4 +271,5 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
         "overall_risk_score": overall,
         "risk_category": category,
         "risk_factors": risk_factors,
+        "serious_injury_flags": injury_indicators.get("has_serious_flags", False),
     }

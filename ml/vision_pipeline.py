@@ -3,7 +3,10 @@ import json
 import sys
 from pose_model import PoseEstimator
 from biomechanics import extract_biomechanics
-from event_detector import detect_jumps, estimate_velocity, detect_contacts, compute_ankle_ground_proximity
+from event_detector import (
+    detect_jumps, estimate_velocity, detect_contacts,
+    compute_ankle_ground_proximity, detect_injury_indicators,
+)
 from vision_risk_engine import compute_vision_risk
 
 
@@ -39,6 +42,14 @@ def _analyze(pose_data, video_path):
     contact_count, contact_events = detect_contacts(keypoints, effective_fps)
     print(f"[INFO] Detected {contact_count} contact events")
 
+    print(f"[INFO] Detecting serious injury indicators...")
+    injury_indicators = detect_injury_indicators(keypoints, effective_fps, contact_events)
+    if injury_indicators["has_serious_flags"]:
+        print(f"[WARNING] ⚠️  SERIOUS INJURY FLAGS DETECTED: "
+              f"{injury_indicators['critical_count']} critical, {injury_indicators['high_count']} high")
+    else:
+        print(f"[INFO] {injury_indicators['total_count']} injury indicators (none critical)")
+
     ground_contact = compute_ankle_ground_proximity(keypoints, effective_fps)
 
     print(f"[INFO] Computing injury risk assessment...")
@@ -47,6 +58,7 @@ def _analyze(pose_data, video_path):
         jump_data={"jump_count": jump_count, "jump_events": jump_events},
         velocity_data={"velocity_stats": velocity_stats, "velocity_timeline": velocity_timeline},
         contact_data={"contact_count": contact_count, "contact_events": contact_events},
+        injury_indicators=injury_indicators,
     )
 
     return {
@@ -62,6 +74,16 @@ def _analyze(pose_data, video_path):
         "events": {
             "jumps": {"count": jump_count, "events": jump_events},
             "contacts": {"count": contact_count, "events": contact_events},
+        },
+        "injury_indicators": {
+            "total_count": injury_indicators["total_count"],
+            "critical_count": injury_indicators["critical_count"],
+            "high_count": injury_indicators["high_count"],
+            "collapse_count": injury_indicators["collapse_count"],
+            "hyperextension_count": injury_indicators["hyperextension_count"],
+            "stillness_count": injury_indicators["stillness_count"],
+            "has_serious_flags": injury_indicators["has_serious_flags"],
+            "events": injury_indicators["indicators"],
         },
         "graphs": {
             "biomechanics_timeline": features.pop("timeline", []),
@@ -210,18 +232,19 @@ def _print_results(result):
 
     risk = result["risk"]
     print(f"\nOverall Risk Score: {risk['overall_risk_score']}/100 ({risk['risk_category'].upper()})")
+    if risk.get("serious_injury_flags"):
+        print("⚠️  SERIOUS INJURY FLAGS DETECTED")
     print(f"\nRisk Factors:")
     for f in risk["risk_factors"]:
         print(f"  {f['label']}: {f['score']}/100 (weight: {f['weight']}%) — {f['details']}")
 
     events = result["events"]
-    print(f"\nEvents Detected:")
-    print(f"  Jumps: {events['jumps']['count']}")
-    print(f"  Contacts: {events['contacts']['count']}")
-
+    print(f"\nEvents: Jumps={events['jumps']['count']}, Contacts={events['contacts']['count']}")
+    ii = result.get("injury_indicators", {})
+    if ii.get("total_count", 0) > 0:
+        print(f"Injury Indicators: {ii['total_count']} total, {ii['critical_count']} critical, {ii['high_count']} high")
     stats = result["stats"]
-    print(f"\nVelocity: max={stats['velocity']['max_velocity']}, "
-          f"mean={stats['velocity']['mean_velocity']}")
+    print(f"Velocity: max={stats['velocity']['max_velocity']}, mean={stats['velocity']['mean_velocity']}")
 
 
 if __name__ == "__main__":
@@ -229,10 +252,6 @@ if __name__ == "__main__":
         print("Usage:")
         print('  python vision_pipeline.py single <video_path>')
         print('  python vision_pipeline.py player <video_path> ["Player Name"]')
-        print()
-        print("Examples:")
-        print('  python vision_pipeline.py single test_video.mp4')
-        print('  python vision_pipeline.py player nba_clip.mp4 "Austin Reaves #15"')
         sys.exit(1)
 
     mode = sys.argv[1]
