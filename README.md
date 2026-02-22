@@ -1,119 +1,297 @@
-# Lakers Load Intelligence
+# CourtsideIQ — Basketball Analytics Platform
 
-A modern basketball analytics platform focused on modeling workload-based injury risk and minute optimization for the Los Angeles Lakers starting five.
+A modern basketball analytics platform focused on modeling workload-based injury risk and minute optimization for the Los Angeles Lakers starting five. Built as a professional NBA front-office-style tool with real-time data visualization, video-based biomechanical analysis, and ML-driven injury prediction.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Video Analysis — How It Works](#video-analysis--how-it-works)
+- [Machine Learning Pipeline](#machine-learning-pipeline)
+- [NBA API Integration](#nba-api-integration)
+- [Key Components](#key-components)
+- [Configuration & Environment](#configuration--environment)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+
+---
 
 ## Features
 
-- **Player Overview Panel**: Real-time risk scores and recommendations for all 5 starting players
-- **Historical Risk Trends**: Visualize baseline and dynamic risk over the last 20 games
-- **Video Analysis**: Upload and analyze game footage with movement metrics
-- **Schedule Stress Analysis**: Track back-to-backs, road trips, and rest days
-- **Minutes Optimization Simulator**: Interactive tool to predict risk based on playing time
-- **Feature Importance**: Understand what factors contribute most to injury risk
-- **Team Availability Summary**: Overall team health and playoff readiness metrics
+| Feature | Description |
+|---|---|
+| **Player Overview Panel** | Real-time risk scores and recommendations for all 5 starting players |
+| **Historical Risk Trends** | Visualize baseline and dynamic risk over the last 20 games |
+| **Video Analysis** | Upload game footage for pose estimation, biomechanical metrics, and injury indicators |
+| **Multi-Player Tracking** | Detect and independently analyze multiple players in a single video |
+| **Body Region Injury Map** | Interactive body outline showing per-region injury risk for each player |
+| **Schedule Stress Analysis** | Track back-to-backs, road trips, rest days, and travel load |
+| **Minutes Optimization Simulator** | Interactive tool to predict risk based on playing time adjustments |
+| **Feature Importance** | Understand which factors (minutes load, contact rate, age, injury history) contribute most to risk |
+| **Team Availability Summary** | Overall team health and playoff readiness metrics |
+| **Analysis History** | Persisted history of video analyses with localStorage |
+| **Settings** | Configurable refresh rate, team, and season parameters |
+
+---
 
 ## Tech Stack
 
-- **Next.js 14** (App Router)
-- **TypeScript**
-- **Tailwind CSS**
-- **shadcn/ui** components
-- **Recharts** for data visualization
-- **Radix UI** primitives
-- **MediaPipe Pose** for pose estimation and movement analysis
+| Layer | Technology |
+|---|---|
+| **Framework** | [Next.js 14](https://nextjs.org/) (App Router, React Server Components) |
+| **Language** | TypeScript |
+| **Styling** | Tailwind CSS, dark theme with Lakers purple (`#552583`) and gold (`#FDB927`) |
+| **UI Components** | [shadcn/ui](https://ui.shadcn.com/) + [Radix UI](https://www.radix-ui.com/) primitives |
+| **Charts** | [Recharts](https://recharts.org/) |
+| **Pose Estimation** | [MediaPipe Pose](https://google.github.io/mediapipe/solutions/pose.html) (in-browser, WebAssembly) |
+| **ML Pipeline** | Python (scikit-learn logistic regression, `nba_api` data collection) |
+| **Vision API** | Optional Python backend (`localhost:5050`) for server-side multi-player video analysis |
 
-## Getting Started
-
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Run the development server:
-```bash
-npm run dev
-```
-
-3. Open [http://localhost:3000](http://localhost:3000) in your browser
-
-## Design
-
-- Dark theme with purple (#552583) and gold (#FDB927) accents
-- Professional NBA front office analytics tool aesthetic
-- Responsive design for all screen sizes
-- Smooth animations and transitions
+---
 
 ## Project Structure
 
 ```
-├── app/
-│   ├── layout.tsx          # Root layout
-│   ├── page.tsx            # Main dashboard page
-│   └── globals.css         # Global styles
+sports-tracker/
+├── app/                          # Next.js App Router pages
+│   ├── layout.tsx                # Root layout (metadata, VideoRiskProvider)
+│   ├── page.tsx                  # Main dashboard
+│   ├── globals.css               # Global styles & Tailwind config
+│   ├── players/
+│   │   └── [id]/page.tsx         # Individual player detail page
+│   ├── schedule/page.tsx         # Schedule stress analysis page
+│   ├── settings/page.tsx         # App settings page
+│   └── video/page.tsx            # Video analysis page
+│
 ├── components/
-│   ├── dashboard/          # Dashboard components
-│   └── ui/                 # shadcn/ui components
-├── lib/
-│   ├── mockData.ts         # Mock data for demo
-│   ├── videoAnalysis.ts    # Video analysis engine with pose estimation
-│   └── utils.ts            # Utility functions
-└── public/                 # Static assets
+│   ├── dashboard/                # Feature-level components
+│   │   ├── BodyOutline.tsx       # SVG body map with per-region injury risk
+│   │   ├── Header.tsx            # Top navigation header
+│   │   ├── Sidebar.tsx           # Left sidebar navigation
+│   │   └── VideoAnalysisPanel.tsx# Full video analysis UI (upload, detect, results)
+│   └── ui/                       # shadcn/ui base components
+│       ├── badge.tsx
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── select.tsx
+│       └── ...
+│
+├── contexts/
+│   └── VideoRiskContext.tsx       # React context for sharing video risk scores across pages
+│
+├── lib/                          # Data, utilities, analysis engines
+│   ├── mockData.ts               # Player data, schedule stress, feature importance
+│   ├── analyticsData.ts          # Injury predictions, performance trends
+│   ├── playerHistoryData.ts      # Per-player historical game data (generated by ML pipeline)
+│   ├── playerBodyInjuryData.ts   # Body region risk mapping per player
+│   ├── scheduleData.ts           # Game schedule data & stats computation
+│   ├── scheduleClient.ts         # Fetcher for live schedule data
+│   ├── videoAnalysis.ts          # In-browser video analyzer (MediaPipe + heuristics)
+│   ├── videoAnalysisApi.ts       # Client for external vision API + analysis history
+│   ├── videoAnalysisModel.ts     # Documentation of the analysis model architecture
+│   └── utils.ts                  # Utility functions (cn, etc.)
+│
+├── ml/                           # Python ML pipeline
+│   ├── build_dataset.py          # Fetches NBA data via nba_api, builds training CSV & JSON
+│   ├── train_model.py            # Trains logistic regression injury risk model
+│   ├── test_pipeline.py          # End-to-end pipeline test with video analysis
+│   └── data/                     # Generated training data & model weights
+│
+├── public/                       # Static assets
+├── INSTALL.md                    # Installation troubleshooting guide
+├── README.md                     # This file
+├── package.json
+├── tailwind.config.ts
+├── tsconfig.json
+└── next.config.js
 ```
 
-## Video Analysis - How It Works
+---
 
-### Current Implementation
+## Getting Started
 
-**Pose Estimation**: Uses **MediaPipe Pose** (Google's pre-trained computer vision model)
-- ✅ Real ML model (not LLM inference)
-- ✅ Detects 33 body landmarks in real-time
-- ✅ Runs entirely in browser using WebAssembly
-- ✅ Industry-standard pose estimation
+### Prerequisites
 
-**Movement Quality Assessment**: Rule-based algorithms (heuristics)
-- ⚠️ NOT a trained ML model
-- ⚠️ NOT an LLM inference
-- ✅ Uses biomechanical principles and research-based thresholds
-- ✅ Calculates metrics based on sports science literature
+- **Node.js** ≥ 18
+- **npm** ≥ 9
+- (Optional) **Python** ≥ 3.9 for the ML pipeline
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/vinaylalwani/sports-tracker.git
+cd sports-tracker
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Build for Production
+
+```bash
+npm run build
+npm start
+```
+
+---
+
+## Video Analysis — How It Works
+
+### Architecture
+
+The platform supports two video analysis modes:
+
+#### 1. In-Browser Analysis (Default)
+
+- **Pose Estimation**: Uses **MediaPipe Pose** — a real, pre-trained computer vision model from Google
+  - Detects 33 body landmarks per frame in real-time
+  - Runs entirely in the browser via WebAssembly (no server needed)
+- **Movement Quality Assessment**: Rule-based heuristic algorithms
+  - Landing mechanics (knee valgus angles, symmetry)
+  - Movement asymmetry (left vs. right limb comparison)
+  - Fatigue indicators (movement quality degradation over time)
+  - Jump detection (vertical velocity spikes)
+  - Contact proxy scoring
+
+#### 2. Server-Side Vision API (Optional)
+
+- External Python backend at `localhost:5050` (configurable via `NEXT_PUBLIC_VISION_API_URL`)
+- Multi-player detection and tracking
+- Returns per-player biomechanics frames, velocity data, ground contact analysis, jump/contact events, and injury indicators
+- Results include risk assessment with categorized risk factors and severity scoring
 
 ### What It Analyzes
 
-- **Jump Count**: Detects vertical jumps via velocity spikes
-- **Acceleration Bursts**: Identifies rapid movement changes
-- **Movement Intensity**: Measures overall velocity and activity
-- **Contact Proxy**: Estimates contact based on ground proximity
-- **Landing Mechanics**: Analyzes knee angles (valgus detection)
-- **Movement Asymmetry**: Compares left vs right side patterns
-- **Fatigue Indicators**: Detects movement degradation over time
-- **Overall Injury Risk**: Weighted combination of all factors
+| Metric | Description |
+|---|---|
+| Jump Count & Height | Detects jumps via vertical velocity spikes |
+| Landing Mechanics | Knee angle analysis on landing frames |
+| Movement Asymmetry | Left vs. right limb movement comparison |
+| Fatigue Indicators | Progressive movement quality degradation |
+| Movement Intensity | Overall activity level scoring |
+| Contact Proxy | Proximity-based contact estimation |
+| Game Load Stress | Composite workload metric |
+| Injury Risk Score | Overall 0–100 risk with category (Low/Moderate/High) |
 
-### Limitations & Future Improvements
+### Limitations
 
-Current system uses heuristic algorithms. For production use, consider:
-1. Training ML model on actual injury data
-2. Using player-specific baselines
-3. Integrating professional biomechanics APIs
-4. Adding temporal sequence analysis (LSTM/Transformer models)
+- Heuristic-based movement assessment (not trained on injury outcome data)
+- Does not account for individual player baselines
+- No historical injury correlation in the video model
+- Simplified biomechanical models
+- Single-camera 2D analysis (no 3D reconstruction)
+
+---
+
+## Machine Learning Pipeline
+
+Located in the `ml/` directory:
+
+### 1. Data Collection (`build_dataset.py`)
+
+```bash
+cd ml
+python build_dataset.py
+```
+
+- Fetches real NBA player game logs, injury data, and biometric info via the [`nba_api`](https://github.com/swar/nba_api) library
+- Computes rolling workload features: `MIN_ROLLING_10`, `CONTACT_RATE`, `AGE`, `INJURY_COUNT`
+- Outputs:
+  - `data/training.csv` — training dataset
+  - `../lib/playerHistoryData.json` — frontend-ready player history
+
+### 2. Model Training (`train_model.py`)
+
+```bash
+python train_model.py
+```
+
+- Trains a **logistic regression** classifier on the workload features
+- Outputs model coefficients as JSON weights consumed by the frontend for feature importance visualization  
+
+### 3. Pipeline Testing (`test_pipeline.py`)
+
+```bash
+python test_pipeline.py
+```
+
+- Runs the full vision analysis pipeline on a test video
+- Outputs `vision_result.json` with all graph data, risk scores, and detected events
+
+---
 
 ## NBA API Integration
 
-The app includes integration with **BALLDONTLIE NBA API** (free tier):
-- Real NBA player data and statistics
-- Game schedules and results
-- Player performance metrics
-- Team information
+The schedule page supports live data fetching:
 
-API endpoints:
-- `/api/nba/players` - Get player data
-- `/api/nba/stats` - Get player statistics
-- `/api/nba/games` - Get game schedules
+- **`lib/scheduleClient.ts`** — Fetches upcoming Lakers games from the NBA API
+- **`lib/scheduleData.ts`** — Fallback static schedule data with stats computation (back-to-backs, road trips, rest days)
+- Falls back gracefully to mock data if the API is unavailable
 
-**Note**: ESPN doesn't provide a free public API. BALLDONTLIE is the recommended free alternative for NBA data.
+---
 
-## Demo Data
+## Key Components
 
-The application uses mock data for demonstration purposes. Player risk scores and analytics are simulated. Video analysis uses real pose estimation with heuristic-based movement assessment.
+### Dashboard (`app/page.tsx`)
+The main landing page with player risk overview, team availability, schedule stress summary, and feature importance chart.
+
+### Player Detail (`app/players/[id]/page.tsx`)
+Per-player deep dive with:
+- Risk score and category badge
+- Historical risk trend charts (line, bar, scatter via Recharts)
+- Body region injury map ([`BodyOutline`](components/dashboard/BodyOutline.tsx) component)
+- Injury history and risk factors
+- Performance trend analysis
+
+### Video Analysis (`app/video/page.tsx`)
+Full video analysis workflow:
+- Drag-and-drop or click-to-upload video files
+- Multi-player detection with bounding box selection
+- Real-time analysis progress with step indicators
+- Detailed results: velocity graphs, biomechanics data, injury indicators, risk assessment
+- Analysis history with localStorage persistence
+- Assign results to dashboard players
+
+### Schedule (`app/schedule/page.tsx`)
+- Upcoming game cards with opponent, date, and travel info
+- Summary stats (total games, back-to-backs, road trips, average rest)
+- Live data indicator when connected to NBA API
+
+### Settings (`app/settings/page.tsx`)
+- Data refresh rate (hourly, daily, manual)
+- Team and season selection
+
+---
+
+## Configuration & Environment
+
+| Variable | Default | Description |
+|---|---|---|
+| `NEXT_PUBLIC_VISION_API_URL` | `http://localhost:5050` | URL for the optional server-side vision analysis API |
+
+---
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. **Delete `node_modules` and `package-lock.json`**, then run `npm install` again
+2. **Clear the Next.js cache**: `rm -rf .next`
+3. **Rebuild**: `npm run build`
+4. See [`INSTALL.md`](INSTALL.md) for additional troubleshooting steps
+
+---
 
 ## License
 
-MIT
+This project is for educational and demonstration purposes.
