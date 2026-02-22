@@ -160,7 +160,7 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data, injury
     weighted_risk += jump_risk * 15
     total_weight += 15
 
-    # --- 6. Contact/collision risk (weight: 25) ---
+    # --- 6. Contact/collision risk (weight: 20) ---
     contact_count = contact_data.get("contact_count", 0)
     contact_events = contact_data.get("contact_events", [])
 
@@ -168,41 +168,41 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data, injury
     medium_severity = sum(1 for e in contact_events if e.get("severity") == "medium")
 
     contact_risk = 0
-    if contact_count > 10:
-        contact_risk = 55
-    elif contact_count > 5:
-        contact_risk = 35
-    elif contact_count > 2:
-        contact_risk = 20
+    if contact_count > 15:
+        contact_risk = 50
+    elif contact_count > 8:
+        contact_risk = 30
+    elif contact_count > 4:
+        contact_risk = 15
     elif contact_count > 0:
-        contact_risk = 8
+        contact_risk = 5
 
-    contact_risk += high_severity * 15
-    contact_risk += medium_severity * 5
+    contact_risk += high_severity * 10
+    contact_risk += medium_severity * 3
 
     if contact_events:
         max_decel = max(e.get("deceleration", 0) for e in contact_events)
         max_jerk = max(e.get("jerk", 0) for e in contact_events)
         mean_decel = sum(e.get("deceleration", 0) for e in contact_events) / len(contact_events)
-        if mean_decel > 0 and max_decel > mean_decel * 2.5:
-            contact_risk += 20
-        elif mean_decel > 0 and max_decel > mean_decel * 1.8:
-            contact_risk += 10
-        if max_jerk > 50:
+        if mean_decel > 0 and max_decel > mean_decel * 3.0:
             contact_risk += 15
-        elif max_jerk > 25:
-            contact_risk += 8
+        elif mean_decel > 0 and max_decel > mean_decel * 2.0:
+            contact_risk += 7
+        if max_jerk > 80:
+            contact_risk += 12
+        elif max_jerk > 40:
+            contact_risk += 5
 
     contact_risk = _clamp(contact_risk)
     risk_factors.append({
         "factor": "contact", "label": "Contact/Collision Risk",
-        "score": round(contact_risk, 1), "weight": 25,
+        "score": round(contact_risk, 1), "weight": 20,
         "details": f"Contact events: {contact_count}, High severity: {high_severity}, Medium: {medium_severity}",
     })
-    weighted_risk += contact_risk * 25
-    total_weight += 25
+    weighted_risk += contact_risk * 20
+    total_weight += 20
 
-    # --- 7. Serious Injury Indicators (weight: 20) ---
+    # --- 7. Serious Injury Indicators (weight: 15) ---
     injury_risk = 0
     critical = injury_indicators.get("critical_count", 0)
     high_inj = injury_indicators.get("high_count", 0)
@@ -210,21 +210,18 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data, injury
     hyperext = injury_indicators.get("hyperextension_count", 0)
     stillness = injury_indicators.get("stillness_count", 0)
 
-    # Critical events are extremely concerning
-    injury_risk += critical * 30
-    injury_risk += high_inj * 15
+    injury_risk += critical * 25
+    injury_risk += high_inj * 10
 
-    # Specific patterns
     if collapses > 0:
-        injury_risk += 20
-    if stillness > 0:
-        injury_risk += 25  # player stopped moving after impact
-    if hyperext > 0:
         injury_risk += 15
-
-    # Combination multiplier: collapse + stillness together = very bad
-    if collapses > 0 and stillness > 0:
+    if stillness > 0:
         injury_risk += 20
+    if hyperext > 0:
+        injury_risk += 10
+
+    if collapses > 0 and stillness > 0:
+        injury_risk += 15
 
     injury_risk = _clamp(injury_risk)
 
@@ -241,20 +238,20 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data, injury
 
     risk_factors.append({
         "factor": "injury_indicators", "label": "Serious Injury Indicators",
-        "score": round(injury_risk, 1), "weight": 20,
+        "score": round(injury_risk, 1), "weight": 15,
         "details": detail_str,
     })
-    weighted_risk += injury_risk * 20
-    total_weight += 20
+    weighted_risk += injury_risk * 15
+    total_weight += 15
 
     # --- Overall score ---
     overall = round(weighted_risk / total_weight, 1) if total_weight > 0 else 0
 
-    # Emergency boost: if serious flags detected, floor the risk score
-    if injury_indicators.get("has_serious_flags", False):
-        overall = max(overall, 65)  # minimum 65 if serious injury signals present
-    if critical > 0:
-        overall = max(overall, 75)  # minimum 75 if critical
+    # Only boost if truly serious — require critical events
+    if injury_indicators.get("has_serious_flags", False) and critical > 0:
+        overall = max(overall, 70)
+    elif injury_indicators.get("has_serious_flags", False):
+        overall = max(overall, 55)
 
     overall = _clamp(overall)
 
