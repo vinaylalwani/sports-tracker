@@ -6,8 +6,28 @@ import { VideoAnalysisPanel } from "@/components/dashboard/VideoAnalysisPanel"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { History, FileVideo, TrendingUp } from "lucide-react"
+import { combineVisionWithBaseline } from "@/lib/riskProjection"
+import { useState } from "react"
 
 export default function VideoPage() {
+  // 🔵 Vision Risk State (NEW)
+  const [visionRisk, setVisionRisk] = useState<number | null>(null)
+
+  // 🔵 Example baseline risk (replace later with real player data)
+  const baselineRisk = 40
+
+  // 🔵 Final Combined Risk
+  const finalRisk =
+    visionRisk !== null
+      ? combineVisionWithBaseline(baselineRisk, visionRisk)
+      : baselineRisk
+
+  const getRiskStatus = (risk: number) => {
+    if (risk < 30) return "Low Risk"
+    if (risk < 60) return "Moderate Risk"
+    return "High Risk"
+  }
+
   // Mock video analysis history
   const analysisHistory = [
     {
@@ -56,7 +76,58 @@ export default function VideoPage() {
             </div>
 
             {/* Main Video Analysis Panel */}
-            <VideoAnalysisPanel />
+            <VideoAnalysisPanel onRiskComputed={setVisionRisk} />
+
+            {/* 🔵 NEW: Integrated Risk Display */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-[#FDB927]" />
+                  Integrated Injury Projection
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Baseline Risk
+                    </div>
+                    <div className="font-semibold">{baselineRisk}%</div>
+                  </div>
+
+                  {visionRisk !== null && (
+                    <div>
+                      <div className="text-sm text-muted-foreground">
+                        Vision Risk
+                      </div>
+                      <div className="font-semibold">{visionRisk}%</div>
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Final Combined Risk
+                    </div>
+                    <div className="text-lg font-bold text-[#FDB927]">
+                      {finalRisk.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+
+                <Badge
+                  className="mt-4"
+                  variant={
+                    finalRisk < 30
+                      ? "success"
+                      : finalRisk < 60
+                      ? "warning"
+                      : "danger"
+                  }
+                >
+                  {getRiskStatus(finalRisk)}
+                </Badge>
+              </CardContent>
+            </Card>
 
             {/* Analysis History */}
             <Card>
@@ -78,7 +149,9 @@ export default function VideoPage() {
                           <FileVideo className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                          <div className="font-semibold">{analysis.player}</div>
+                          <div className="font-semibold">
+                            {analysis.player}
+                          </div>
                           <div className="text-sm text-muted-foreground">
                             vs {analysis.opponent} • {analysis.date}
                           </div>
@@ -86,11 +159,17 @@ export default function VideoPage() {
                       </div>
                       <div className="flex items-center gap-6">
                         <div className="text-right">
-                          <div className="text-sm text-muted-foreground">Jumps</div>
-                          <div className="font-semibold">{analysis.jumpCount}</div>
+                          <div className="text-sm text-muted-foreground">
+                            Jumps
+                          </div>
+                          <div className="font-semibold">
+                            {analysis.jumpCount}
+                          </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm text-muted-foreground">Risk Score</div>
+                          <div className="text-sm text-muted-foreground">
+                            Risk Score
+                          </div>
                           <div className="text-lg font-bold text-[#FDB927]">
                             {analysis.riskScore}%
                           </div>

@@ -18,7 +18,12 @@ import {
 } from "lucide-react"
 import { videoAnalyzer, MovementMetrics } from "@/lib/videoAnalysis"
 
-export function VideoAnalysisPanel() {
+
+interface Props {
+  onRiskComputed?: (risk: number) => void
+}
+
+export function VideoAnalysisPanel({ onRiskComputed }: Props) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [hasVideo, setHasVideo] = useState(false)
@@ -104,6 +109,10 @@ export function VideoAnalysisPanel() {
       )
 
       setAnalysisResults(metrics)
+      if (onRiskComputed) {
+        onRiskComputed(metrics.overallInjuryRisk)
+      }
+      console.log("Vision Risk Score:", metrics.overallInjuryRisk)
       setIsAnalyzing(false)
     } catch (err) {
       console.error("Video analysis error:", err)

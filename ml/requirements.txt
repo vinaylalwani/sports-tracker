@@ -4,3 +4,11 @@ numpy
 scikit-learn
 joblib
 nbainjuries
+mediapipe==0.10.11
+opencv-python
+numpy
+pandas
+scikit-learn
+joblib
+setuptools
+wheel
