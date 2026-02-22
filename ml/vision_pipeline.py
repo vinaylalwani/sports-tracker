@@ -52,7 +52,7 @@ def _analyze(pose_data, video_path):
     return {
         "success": True,
         "video_info": {
-            "path": video_path,
+            "path": os.path.basename(video_path),
             "fps": round(pose_data["fps"], 2),
             "duration_seconds": round(video_duration, 2),
             "frames_analyzed": len(keypoints),
@@ -76,9 +76,7 @@ def _analyze(pose_data, video_path):
 
 
 def run_vision_pipeline(video_path, frame_skip=3, resize_width=640):
-    """
-    Simple single-person pipeline (works when only one person is in frame).
-    """
+    """Single-person pipeline (works when only one person is in frame)."""
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
 
@@ -95,30 +93,69 @@ def run_vision_pipeline(video_path, frame_skip=3, resize_width=640):
 
 def run_player_pipeline(video_path, player_name="target player",
                          frame_skip=3, resize_width=640, select_frame=0):
-    """
-    Multi-player pipeline: detects all players, lets you click on the target,
-    then tracks and analyzes only that player.
-
-    Args:
-        video_path: path to video file
-        player_name: name for display (e.g., "Austin Reaves #15")
-        frame_skip: process every Nth frame
-        resize_width: resize frames for speed
-        select_frame: which frame to show for player selection
-    """
+    """Interactive multi-player pipeline (opens OpenCV window for player selection)."""
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video not found: {video_path}")
 
     from player_tracker import PlayerTracker
 
-    # Step 1: Detect and select player
     print(f"[INFO] Initializing player tracker...")
     tracker = PlayerTracker(model_size="yolov8n.pt")
 
     print(f"[INFO] Please select {player_name} in the popup window...")
     tracker.select_player_interactive(video_path, frame_idx=select_frame)
 
-    # Step 2: Extract crops of the target player
+    return _run_tracking_pipeline(tracker, video_path, player_name, frame_skip, resize_width)
+
+
+def run_player_pipeline_headless(video_path, player_name="target player",
+                                  frame_skip=3, resize_width=640, track_id=None):
+    """
+    Headless multi-player pipeline (no GUI).
+    If track_id is None, picks the largest detected person.
+    Used by the API server.
+    """
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"Video not found: {video_path}")
+
+    from player_tracker import PlayerTracker
+    import cv2
+
+    print(f"[INFO] Initializing player tracker (headless)...")
+    tracker = PlayerTracker(model_size="yolov8n.pt")
+
+    if track_id is not None:
+        tracker.set_target_track_id(track_id)
+        print(f"[INFO] Using provided track ID: {track_id}")
+    else:
+        # Auto-select the largest person in frame 30
+        cap = cv2.VideoCapture(video_path)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        seek_frame = min(30, max(0, total - 1))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, seek_frame)
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret:
+            return {"success": False, "error": "Cannot read video"}
+
+        results = tracker.model.track(frame, persist=True, classes=[0], verbose=False)
+        if results[0].boxes is None or results[0].boxes.id is None or len(results[0].boxes) == 0:
+            return {"success": False, "error": "No players detected in video"}
+
+        boxes = results[0].boxes.xyxy.cpu().numpy()
+        ids = results[0].boxes.id.cpu().numpy().astype(int)
+        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        largest_idx = areas.argmax()
+        auto_id = int(ids[largest_idx])
+        tracker.set_target_track_id(auto_id)
+        print(f"[INFO] Auto-selected largest player with track ID: {auto_id}")
+
+    return _run_tracking_pipeline(tracker, video_path, player_name, frame_skip, resize_width)
+
+
+def _run_tracking_pipeline(tracker, video_path, player_name, frame_skip, resize_width):
+    """Shared logic for both interactive and headless player pipelines."""
     print(f"[INFO] Tracking {player_name} across video...")
     track_data = tracker.extract_player_crops(
         video_path, frame_skip=frame_skip, resize_width=resize_width
@@ -131,12 +168,10 @@ def run_player_pipeline(video_path, player_name="target player",
         return {
             "success": False,
             "error": f"Only tracked {player_name} in {len(crops)} frames. "
-                     "Try: (1) frame_skip=1, (2) a longer clip, or (3) a clip where "
-                     "the player is on screen more.",
+                     "Try a longer clip or one where the player is more visible.",
             "frames_detected": len(crops),
         }
 
-    # Step 3: Run pose estimation on cropped player images
     print(f"[INFO] Running pose estimation on {player_name}...")
     pose = PoseEstimator()
     pose_data = pose.extract_keypoints_from_crops(
@@ -148,7 +183,6 @@ def run_player_pipeline(video_path, player_name="target player",
         original_frame_size=track_data["frame_size"],
     )
 
-    # Step 4: Analyze
     result = _analyze(pose_data, video_path)
 
     if result.get("success"):
@@ -191,19 +225,6 @@ def _print_results(result):
 
 
 if __name__ == "__main__":
-    # ---------------------------------------------------------------
-    # USAGE:
-    #
-    #   Single person video (e.g., workout clip):
-    #     python vision_pipeline.py single path/to/video.mp4
-    #
-    #   Multi-player video (e.g., NBA game, track Austin Reaves):
-    #     python vision_pipeline.py player path/to/video.mp4 "Austin Reaves #15"
-    #
-    #   A window will pop up — click on the player you want to track,
-    #   then press any key to start analysis.
-    # ---------------------------------------------------------------
-
     if len(sys.argv) < 3:
         print("Usage:")
         print('  python vision_pipeline.py single <video_path>')

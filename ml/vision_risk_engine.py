@@ -26,13 +26,13 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
     total_weight = 0
     weighted_risk = 0
 
-    # --- 1. Knee flexion risk ---
+    # --- 1. Knee flexion risk (weight: 20) ---
     knee_risk = 0
     avg_knee = features.get("avg_knee_angle", 180)
     min_knee = features.get("min_knee_angle", 180)
 
     if min_knee < 90:
-        knee_risk = 40  # deep flexion under load is risky
+        knee_risk = 40
     elif avg_knee < 130:
         knee_risk = 30
     elif avg_knee < 150:
@@ -40,7 +40,6 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
     else:
         knee_risk = 5
 
-    # Add variability component
     knee_var = features.get("knee_variability", 0)
     knee_risk += min(20, knee_var * 0.8)
 
@@ -49,13 +48,13 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
         "factor": "knee_flexion",
         "label": "Knee Flexion Risk",
         "score": round(knee_risk, 1),
-        "weight": 25,
+        "weight": 20,
         "details": f"Avg knee angle: {avg_knee}°, Min: {min_knee}°, Variability: {knee_var:.1f}°",
     })
-    weighted_risk += knee_risk * 25
-    total_weight += 25
+    weighted_risk += knee_risk * 20
+    total_weight += 20
 
-    # --- 2. Hip control risk ---
+    # --- 2. Hip control risk (weight: 15) ---
     hip_risk = 0
     avg_hip = features.get("avg_hip_angle", 180)
     min_hip = features.get("min_hip_angle", 180)
@@ -77,13 +76,13 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
         "factor": "hip_control",
         "label": "Hip Control Risk",
         "score": round(hip_risk, 1),
-        "weight": 20,
+        "weight": 15,
         "details": f"Avg hip angle: {avg_hip}°, Min: {min_hip}°, Variability: {hip_var:.1f}°",
     })
-    weighted_risk += hip_risk * 20
-    total_weight += 20
+    weighted_risk += hip_risk * 15
+    total_weight += 15
 
-    # --- 3. Trunk stability risk ---
+    # --- 3. Trunk stability risk (weight: 10) ---
     trunk_risk = 0
     avg_trunk = features.get("avg_trunk_lean", 0)
     max_trunk = features.get("max_trunk_lean", 0)
@@ -108,7 +107,7 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
     weighted_risk += trunk_risk * 10
     total_weight += 10
 
-    # --- 4. Knee symmetry risk ---
+    # --- 4. Knee symmetry risk (weight: 10) ---
     sym_risk = 0
     avg_sym = features.get("avg_knee_symmetry_diff", 0)
     max_sym = features.get("max_knee_symmetry_diff", 0)
@@ -133,7 +132,7 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
     weighted_risk += sym_risk * 10
     total_weight += 10
 
-    # --- 5. Jump load risk ---
+    # --- 5. Jump load risk (weight: 20) ---
     jump_count = jump_data.get("jump_count", 0)
     jump_events = jump_data.get("jump_events", [])
 
@@ -147,7 +146,6 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
     elif jump_count > 0:
         jump_risk = 5
 
-    # High jumps increase risk
     if jump_events:
         max_height = max(e["jump_height_norm"] for e in jump_events)
         if max_height > 0.1:
@@ -166,40 +164,60 @@ def compute_vision_risk(features, jump_data, velocity_data, contact_data):
     weighted_risk += jump_risk * 20
     total_weight += 20
 
-    # --- 6. Contact/collision risk ---
+    # --- 6. Contact/collision risk (weight: 25 — highest weight) ---
     contact_count = contact_data.get("contact_count", 0)
     contact_events = contact_data.get("contact_events", [])
 
+    high_severity = sum(1 for e in contact_events if e.get("severity") == "high")
+    medium_severity = sum(1 for e in contact_events if e.get("severity") == "medium")
+
+    # Base risk from count
     contact_risk = 0
     if contact_count > 10:
-        contact_risk = 50
+        contact_risk = 55
     elif contact_count > 5:
-        contact_risk = 30
+        contact_risk = 35
     elif contact_count > 2:
-        contact_risk = 15
+        contact_risk = 20
     elif contact_count > 0:
-        contact_risk = 5
+        contact_risk = 8
 
-    # High severity contacts
-    high_severity = sum(1 for e in contact_events if e.get("severity") == "high")
-    contact_risk += high_severity * 10
+    # Hard contacts escalate significantly
+    contact_risk += high_severity * 15
+    contact_risk += medium_severity * 5
+
+    # Peak deceleration bonus: if any single event has very high decel, spike the risk
+    if contact_events:
+        max_decel = max(e.get("deceleration", 0) for e in contact_events)
+        max_jerk = max(e.get("jerk", 0) for e in contact_events)
+        # Adaptive: if peak decel is >2x the mean, it's a hard hit
+        mean_decel = sum(e.get("deceleration", 0) for e in contact_events) / len(contact_events)
+        if mean_decel > 0 and max_decel > mean_decel * 2.5:
+            contact_risk += 20
+        elif mean_decel > 0 and max_decel > mean_decel * 1.8:
+            contact_risk += 10
+
+        # Very high absolute jerk = violent collision
+        if max_jerk > 50:
+            contact_risk += 15
+        elif max_jerk > 25:
+            contact_risk += 8
 
     contact_risk = _clamp(contact_risk)
     risk_factors.append({
         "factor": "contact",
         "label": "Contact/Collision Risk",
         "score": round(contact_risk, 1),
-        "weight": 15,
-        "details": f"Contact events: {contact_count}, High severity: {high_severity}",
+        "weight": 25,
+        "details": f"Contact events: {contact_count}, High severity: {high_severity}, Medium: {medium_severity}",
     })
-    weighted_risk += contact_risk * 15
-    total_weight += 15
+    weighted_risk += contact_risk * 25
+    total_weight += 25
 
     # --- Overall score ---
     overall = round(weighted_risk / total_weight, 1) if total_weight > 0 else 0
     overall = _clamp(overall)
 
-    # Category
     if overall >= 70:
         category = "high"
     elif overall >= 40:

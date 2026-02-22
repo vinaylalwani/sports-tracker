@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import {
   Upload,
@@ -15,232 +14,351 @@ import {
   TrendingUp,
   AlertTriangle,
   X,
+  User,
+  Loader2,
+  Target,
+  ChevronDown,
+  ChevronUp,
+  MousePointerClick,
+  CheckCircle2,
+  Users,
+  Minus,
 } from "lucide-react"
-import { videoAnalyzer, MovementMetrics } from "@/lib/videoAnalysis"
-
+import {
+  analyzeMultiPlayers,
+  detectPlayers,
+  checkApiHealth,
+  type AnalysisResult,
+  type DetectedPlayer,
+  type RiskFactor,
+  type SelectedPlayer,
+} from "@/lib/videoAnalysisApi"
 
 interface Props {
   onRiskComputed?: (risk: number) => void
+  onAnalysisComplete?: (results: AnalysisResult[]) => void
 }
 
-export function VideoAnalysisPanel({ onRiskComputed }: Props) {
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [progress, setProgress] = useState(0)
+type PanelStep = "upload" | "select-players" | "ready" | "analyzing" | "results"
+
+export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props) {
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null)
   const [hasVideo, setHasVideo] = useState(false)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
-  const [analysisResults, setAnalysisResults] = useState<MovementMetrics | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [step, setStep] = useState<PanelStep>("upload")
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Player detection & selection (multi)
+  const [detectedPlayers, setDetectedPlayers] = useState<DetectedPlayer[]>([])
+  const [selectedPlayers, setSelectedPlayers] = useState<SelectedPlayer[]>([])
+  const [detectionFrameImage, setDetectionFrameImage] = useState<string | null>(null)
+  const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null)
+  const [isDetecting, setIsDetecting] = useState(false)
+  const [hoveredTrackId, setHoveredTrackId] = useState<number | null>(null)
+  const [editingNameId, setEditingNameId] = useState<number | null>(null)
+
+  // Results (multi-player)
+  const [playerResults, setPlayerResults] = useState<AnalysisResult[]>([])
+  const [activeResultIdx, setActiveResultIdx] = useState(0)
+  const [analyzingPlayer, setAnalyzingPlayer] = useState<string | null>(null)
+  const [analyzeProgress, setAnalyzeProgress] = useState({ current: 0, total: 0 })
+
+  // UI
+  const [showDetails, setShowDetails] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
-  useEffect(() => {
-    return () => {
-      // Cleanup
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl)
-      }
-      videoAnalyzer.stop()
-    }
-  }, [videoUrl])
+  useEffect(() => { checkApiHealth().then(setApiOnline) }, [])
+  useEffect(() => { return () => { if (videoUrl) URL.revokeObjectURL(videoUrl) } }, [videoUrl])
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-
-    if (!file.type.startsWith("video/")) {
-      setError("Please select a video file")
-      return
-    }
-
-    // Check file size (limit to 100MB)
-    const maxSize = 100 * 1024 * 1024 // 100MB
-    if (file.size > maxSize) {
-      setError("Video file is too large. Please select a file under 100MB.")
-      return
-    }
+    if (!file.type.startsWith("video/")) { setError("Please select a video file"); return }
+    if (file.size > 200 * 1024 * 1024) { setError("Video too large (max 200MB)"); return }
 
     setError(null)
+    setVideoFile(file)
     const url = URL.createObjectURL(file)
     setVideoUrl(url)
     setHasVideo(true)
-    setAnalysisResults(null)
-    setProgress(0)
+    setPlayerResults([])
+    setSelectedPlayers([])
+    setDetectedPlayers([])
+    setDetectionFrameImage(null)
+    // Auto-detect players immediately
+    setStep("select-players")
+    detectPlayersFromFile(file)
+  }
 
-    if (videoRef.current) {
-      videoRef.current.src = url
-      videoRef.current.load()
-      
-      // Wait for video to be ready
-      videoRef.current.onloadedmetadata = () => {
-        if (canvasRef.current && videoRef.current) {
-          canvasRef.current.width = videoRef.current.videoWidth
-          canvasRef.current.height = videoRef.current.videoHeight
-        }
-      }
+  const detectPlayersFromFile = async (file: File) => {
+    setIsDetecting(true)
+    setError(null)
+    try {
+      const result = await detectPlayers(file, 30)
+      if (!result.success) { setError(result.error || "Detection failed"); setStep("upload"); return }
+      setDetectedPlayers(result.players || [])
+      setDetectionFrameImage(result.frame_image || null)
+      setFrameSize(result.frame_size || null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Detection failed")
+      setStep("upload")
+    } finally {
+      setIsDetecting(false)
     }
   }
 
-  const handleAnalyze = async () => {
-    if (!videoRef.current || !canvasRef.current || !videoUrl) return
+  const togglePlayer = (trackId: number) => {
+    setSelectedPlayers((prev) => {
+      const exists = prev.find((p) => p.track_id === trackId)
+      if (exists) return prev.filter((p) => p.track_id !== trackId)
+      if (prev.length >= 5) return prev // max 5
+      return [...prev, { track_id: trackId, name: `Player ${trackId}` }]
+    })
+  }
 
-    setIsAnalyzing(true)
-    setProgress(0)
+  const updatePlayerName = (trackId: number, name: string) => {
+    setSelectedPlayers((prev) =>
+      prev.map((p) => (p.track_id === trackId ? { ...p, name } : p))
+    )
+  }
+
+  const handleAnalyze = async () => {
+    if (!videoFile || selectedPlayers.length === 0) return
+    setStep("analyzing")
     setError(null)
+    setAnalyzeProgress({ current: 0, total: selectedPlayers.length })
+    setAnalyzingPlayer(selectedPlayers[0]?.name || "")
 
     try {
-      const fileInput = fileInputRef.current?.files?.[0]
-      if (!fileInput) {
-        throw new Error("No video file selected")
-      }
+      const result = await analyzeMultiPlayers(videoFile, selectedPlayers, 2)
 
-      const metrics = await videoAnalyzer.analyzeVideo(
-        fileInput,
-        canvasRef.current,
-        videoRef.current,
-        (prog) => {
-          setProgress(prog)
-        },
-        (results) => {
-          setAnalysisResults(results)
-          setIsAnalyzing(false)
+      if (result.success && result.results) {
+        setPlayerResults(result.results)
+        setActiveResultIdx(0)
+        setStep("results")
+
+        // Report the highest risk score
+        const successResults = result.results.filter((r) => r.success && r.risk)
+        if (successResults.length > 0) {
+          const maxRisk = Math.max(...successResults.map((r) => r.risk!.overall_risk_score))
+          onRiskComputed?.(maxRisk)
         }
-      )
-
-      setAnalysisResults(metrics)
-      if (onRiskComputed) {
-        onRiskComputed(metrics.overallInjuryRisk)
+        onAnalysisComplete?.(result.results)
+      } else {
+        setError(result.error || "Analysis failed")
+        setStep("ready")
       }
-      console.log("Vision Risk Score:", metrics.overallInjuryRisk)
-      setIsAnalyzing(false)
     } catch (err) {
-      console.error("Video analysis error:", err)
-      const errorMessage = err instanceof Error ? err.message : "Analysis failed"
-      setError(errorMessage + ". Please ensure MediaPipe libraries are loaded and try again.")
-      setIsAnalyzing(false)
-      setProgress(0)
+      setError(err instanceof Error ? err.message : "Analysis failed")
+      setStep("ready")
     }
   }
 
   const handleReset = () => {
-    videoAnalyzer.stop()
-    if (videoUrl) {
-      URL.revokeObjectURL(videoUrl)
-    }
-    setVideoUrl(null)
-    setHasVideo(false)
-    setAnalysisResults(null)
-    setProgress(0)
-    setIsAnalyzing(false)
-    setError(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
+    if (videoUrl) URL.revokeObjectURL(videoUrl)
+    setVideoUrl(null); setVideoFile(null); setHasVideo(false)
+    setPlayerResults([]); setError(null); setDetectedPlayers([])
+    setSelectedPlayers([]); setDetectionFrameImage(null)
+    setStep("upload"); setShowDetails(false); setActiveResultIdx(0)
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
-  const metrics = analysisResults
-    ? [
-        {
-          label: "Jump Count",
-          value: analysisResults.jumpCount,
-          icon: Zap,
-          color: "text-blue-400",
-        },
-        {
-          label: "Acceleration Bursts",
-          value: analysisResults.accelerationBursts,
-          icon: Activity,
-          color: "text-green-400",
-        },
-        {
-          label: "Movement Intensity Score",
-          value: analysisResults.movementIntensityScore,
-          icon: TrendingUp,
-          color: "text-yellow-400",
-        },
-        {
-          label: "Contact Proxy Score",
-          value: analysisResults.contactProxyScore,
-          icon: Shield,
-          color: "text-orange-400",
-        },
-        {
-          label: "Game Load Stress Score",
-          value: analysisResults.gameLoadStressScore,
-          icon: BarChart3,
-          color: "text-red-400",
-        },
-        {
-          label: "Landing Mechanics Score",
-          value: analysisResults.landingMechanicsScore,
-          icon: Shield,
-          color: "text-purple-400",
-        },
-        {
-          label: "Movement Asymmetry Score",
-          value: analysisResults.movementAsymmetryScore,
-          icon: Activity,
-          color: "text-cyan-400",
-        },
-        {
-          label: "Fatigue Indicator Score",
-          value: analysisResults.fatigueIndicatorScore,
-          icon: TrendingUp,
-          color: "text-pink-400",
-        },
-      ]
-    : []
-
-  const getInjuryRiskBadge = (risk: number) => {
-    if (risk < 30) return { variant: "success" as const, label: "Low Risk" }
-    if (risk < 60) return { variant: "warning" as const, label: "Moderate Risk" }
-    return { variant: "danger" as const, label: "High Risk" }
+  const getRiskColor = (s: number) => s >= 70 ? "text-red-500" : s >= 40 ? "text-yellow-500" : s >= 20 ? "text-blue-400" : "text-green-400"
+  const getRiskBg = (s: number) => s >= 70 ? "bg-red-500" : s >= 40 ? "bg-yellow-500" : s >= 20 ? "bg-blue-400" : "bg-green-400"
+  const getCategoryBadge = (cat: string) => {
+    const map: Record<string, { className: string; label: string }> = {
+      high: { className: "bg-red-500/20 text-red-400 border-red-500/30", label: "High Risk" },
+      moderate: { className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30", label: "Moderate Risk" },
+      low: { className: "bg-blue-500/20 text-blue-400 border-blue-500/30", label: "Low Risk" },
+      minimal: { className: "bg-green-500/20 text-green-400 border-green-500/30", label: "Minimal Risk" },
+    }
+    return map[cat] || map.minimal
   }
+  const riskFactorIcon = (f: string) => {
+    const map: Record<string, typeof Activity> = {
+      knee_flexion: Activity, hip_control: Shield, trunk_stability: TrendingUp,
+      knee_symmetry: BarChart3, jump_load: Zap, contact: AlertTriangle,
+    }
+    return map[f] || Activity
+  }
+
+  const isPlayerSelected = (trackId: number) => selectedPlayers.some((p) => p.track_id === trackId)
+  const getPlayerName = (trackId: number) => selectedPlayers.find((p) => p.track_id === trackId)?.name || ""
+  const getSelectionIndex = (trackId: number) => selectedPlayers.findIndex((p) => p.track_id === trackId)
+  const activeResult = playerResults[activeResultIdx] || null
 
   return (
     <Card className="flex flex-col">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Play className="h-5 w-5 text-[#FDB927]" />
-          Video Analysis Panel
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Play className="h-5 w-5 text-[#FDB927]" />
+            Video Analysis
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {selectedPlayers.length > 0 && step !== "upload" && step !== "results" && (
+              <Badge variant="outline" className="border-[#FDB927]/50 text-[#FDB927]">
+                <Users className="h-3 w-3 mr-1" />{selectedPlayers.length}/5
+              </Badge>
+            )}
+            {apiOnline !== null && (
+              <Badge variant="outline" className={apiOnline ? "border-green-500/50 text-green-400" : "border-red-500/50 text-red-400"}>
+                {apiOnline ? "API Online" : "API Offline"}
+              </Badge>
+            )}
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
-        <div className="space-y-4">
+        {apiOnline === false && (
+          <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <p className="text-sm text-yellow-400">Vision API is offline. Start it with:</p>
+            <code className="text-xs mt-1 block text-yellow-300/80">cd ml && python api_server.py</code>
+          </div>
+        )}
+
+        {/* ===== PLAYER SELECTION ===== */}
+        {step === "select-players" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-[#FDB927]/10 border border-[#FDB927]/30">
+              <MousePointerClick className="h-5 w-5 text-[#FDB927] shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-[#FDB927]">Select players to track (up to 5)</p>
+                <p className="text-xs text-muted-foreground">Click on each player you want to analyze</p>
+              </div>
+            </div>
+
+            {isDetecting ? (
+              <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
+                <div className="text-center space-y-2">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#FDB927]" />
+                  <p className="text-sm text-muted-foreground">Detecting players...</p>
+                </div>
+              </div>
+            ) : detectionFrameImage ? (
+              <div className="relative w-full rounded-lg overflow-hidden border-2 border-[#FDB927]/40 bg-black">
+                <img src={detectionFrameImage} alt="Player detection" className="w-full h-auto object-contain" draggable={false} />
+                {detectedPlayers.map((p) => {
+                  if (!frameSize) return null
+                  const sx = 100 / frameSize.width
+                  const sy = 100 / frameSize.height
+                  const selected = isPlayerSelected(p.track_id)
+                  const hovered = hoveredTrackId === p.track_id
+                  const idx = getSelectionIndex(p.track_id)
+                  return (
+                    <div
+                      key={p.track_id}
+                      onClick={() => togglePlayer(p.track_id)}
+                      onMouseEnter={() => setHoveredTrackId(p.track_id)}
+                      onMouseLeave={() => setHoveredTrackId(null)}
+                      className={`absolute cursor-pointer transition-all duration-150 ${
+                        selected
+                          ? "border-[3px] border-[#FDB927] bg-[#FDB927]/25 shadow-lg shadow-[#FDB927]/20"
+                          : hovered
+                          ? "border-2 border-white/80 bg-white/15"
+                          : "border-2 border-green-400/50 bg-transparent"
+                      }`}
+                      style={{
+                        left: `${p.bbox.x1 * sx}%`, top: `${p.bbox.y1 * sy}%`,
+                        width: `${(p.bbox.x2 - p.bbox.x1) * sx}%`, height: `${(p.bbox.y2 - p.bbox.y1) * sy}%`,
+                      }}
+                    >
+                      <span className={`absolute -top-6 left-1/2 -translate-x-1/2 text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
+                        selected ? "bg-[#FDB927] text-black" : hovered ? "bg-white text-black" : "bg-green-600/80 text-white"
+                      }`}>
+                        {selected ? `#${idx + 1}` : `ID ${p.track_id}`}
+                      </span>
+                      {selected && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <CheckCircle2 className="h-7 w-7 text-[#FDB927] drop-shadow-lg" />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+
+            {/* Selected players list with editable names */}
+            {selectedPlayers.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Selected Players — click name to edit</h4>
+                {selectedPlayers.map((sp, idx) => (
+                  <div key={sp.track_id} className="flex items-center gap-2 p-2 rounded-lg border border-[#FDB927]/30 bg-[#FDB927]/5">
+                    <Badge className="bg-[#FDB927] text-black text-xs shrink-0">#{idx + 1}</Badge>
+                    {editingNameId === sp.track_id ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        value={sp.name}
+                        onChange={(e) => updatePlayerName(sp.track_id, e.target.value)}
+                        onBlur={() => setEditingNameId(null)}
+                        onKeyDown={(e) => e.key === "Enter" && setEditingNameId(null)}
+                        className="flex-1 px-2 py-1 text-sm rounded border border-border bg-background"
+                      />
+                    ) : (
+                      <span
+                        onClick={() => setEditingNameId(sp.track_id)}
+                        className="flex-1 text-sm font-medium cursor-text hover:text-[#FDB927] transition-colors"
+                      >
+                        {sp.name}
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost" size="icon" className="h-6 w-6 shrink-0"
+                      onClick={() => togglePlayer(sp.track_id)}
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>{detectedPlayers.length} player{detectedPlayers.length !== 1 ? "s" : ""} detected</span>
+              <span>{selectedPlayers.length} selected</span>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setStep("ready")}
+                className="flex-1 bg-[#FDB927] text-black hover:bg-[#FDB927]/90"
+                disabled={selectedPlayers.length === 0}
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Confirm {selectedPlayers.length} Player{selectedPlayers.length !== 1 ? "s" : ""}
+              </Button>
+              <Button onClick={handleReset} variant="outline" size="icon">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ===== VIDEO PREVIEW (non-selection steps) ===== */}
+        {step !== "select-players" && (
           <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border-2 border-border">
             {hasVideo ? (
               <>
-                <video
-                  ref={videoRef}
-                  className={`w-full h-full object-contain ${isAnalyzing ? 'hidden' : ''}`}
-                  playsInline
-                  muted
-                  controls={!isAnalyzing}
-                />
-                <canvas
-                  ref={canvasRef}
-                  className={`w-full h-full object-contain ${isAnalyzing ? '' : 'hidden'}`}
-                />
-                {isAnalyzing && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-                    <div className="w-full px-4 space-y-2">
-                      <p className="text-sm text-center text-white">
-                        Analyzing movement patterns...
+                <video ref={videoRef} src={videoUrl || undefined} className="w-full h-full object-contain" playsInline muted controls={step === "ready" || step === "results"} />
+                {step === "analyzing" && (
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
+                    <div className="w-full px-6 space-y-3 text-center">
+                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#FDB927]" />
+                      <p className="text-sm text-white font-medium">
+                        Analyzing {selectedPlayers.length} player{selectedPlayers.length !== 1 ? "s" : ""}...
                       </p>
-                      <Progress value={progress} className="h-2" />
-                      <p className="text-xs text-center text-white/80">
-                        {Math.round(progress)}% complete
-                      </p>
+                      <p className="text-xs text-white/60">This may take 1–2 minutes</p>
                     </div>
                   </div>
                 )}
-                {!isAnalyzing && analysisResults && (
+                {step === "results" && activeResult?.success && activeResult.risk && (
                   <div className="absolute top-2 right-2 z-10">
-                    <Badge
-                      variant={getInjuryRiskBadge(analysisResults.overallInjuryRisk).variant}
-                    >
-                      {getInjuryRiskBadge(analysisResults.overallInjuryRisk).label}
+                    <Badge className={getCategoryBadge(activeResult.risk.risk_category).className}>
+                      {getCategoryBadge(activeResult.risk.risk_category).label}
                     </Badge>
                   </div>
                 )}
@@ -248,108 +366,214 @@ export function VideoAnalysisPanel({ onRiskComputed }: Props) {
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
                 <Upload className="h-12 w-12 mb-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground mb-4 text-center">
-                  Upload basketball game video for movement analysis
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="video/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="video-upload"
-                />
-                <Button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isAnalyzing}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Select Video
+                <p className="text-sm text-muted-foreground mb-4 text-center">Upload game footage for injury risk analysis</p>
+                <input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileSelect} className="hidden" />
+                <Button onClick={() => fileInputRef.current?.click()} disabled={!apiOnline}>
+                  <Upload className="mr-2 h-4 w-4" />Select Video
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Supports MP4, WebM, MOV formats
-                </p>
+                <p className="text-xs text-muted-foreground mt-2">MP4, WebM, MOV — max 200MB</p>
               </div>
             )}
           </div>
+        )}
 
-          {error && (
-            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-              <p className="text-sm text-destructive">{error}</p>
+        {error && (
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
+
+        {/* ===== READY STEP ===== */}
+        {step === "ready" && (
+          <div className="space-y-3">
+            {/* Selected players summary */}
+            <div className="flex flex-wrap gap-2">
+              {selectedPlayers.map((sp, idx) => (
+                <Badge key={sp.track_id} variant="outline" className="border-[#FDB927]/50 text-[#FDB927]">
+                  #{idx + 1} {sp.name}
+                </Badge>
+              ))}
             </div>
-          )}
-
-          {hasVideo && !isAnalyzing && (
             <div className="flex gap-2">
-              {!analysisResults && (
-                <Button onClick={handleAnalyze} className="flex-1">
-                  <Play className="mr-2 h-4 w-4" />
-                  Start Analysis
-                </Button>
-              )}
-              <Button onClick={handleReset} variant="outline">
-                <X className="mr-2 h-4 w-4" />
-                {analysisResults ? "Reset" : "Remove"}
+              <Button onClick={handleAnalyze} className="flex-1" disabled={!apiOnline || selectedPlayers.length === 0}>
+                <Play className="mr-2 h-4 w-4" />
+                Analyze {selectedPlayers.length} Player{selectedPlayers.length !== 1 ? "s" : ""}
+              </Button>
+              <Button onClick={() => setStep("select-players")} variant="outline" size="sm">
+                <Users className="mr-1 h-3 w-3" />Edit
+              </Button>
+              <Button onClick={handleReset} variant="outline" size="icon">
+                <X className="h-4 w-4" />
               </Button>
             </div>
-          )}
+          </div>
+        )}
 
-          {hasVideo && analysisResults && (
-            <div className="p-4 rounded-lg border border-border bg-card/50">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Overall Injury Risk</span>
-                <span className="text-2xl font-bold text-[#FDB927]">
-                  {analysisResults.overallInjuryRisk}%
-                </span>
+        {/* ===== RESULTS ===== */}
+        {step === "results" && playerResults.length > 0 && (
+          <div className="space-y-4">
+            {/* Player tabs */}
+            {playerResults.length > 1 && (
+              <div className="flex gap-1 overflow-x-auto pb-1">
+                {playerResults.map((r, idx) => {
+                  const name = r.player?.name || `Player ${idx + 1}`
+                  const risk = r.success && r.risk ? r.risk.overall_risk_score : null
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => { setActiveResultIdx(idx); setShowDetails(false) }}
+                      className={`shrink-0 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeResultIdx === idx
+                          ? "bg-[#FDB927] text-black"
+                          : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                      }`}
+                    >
+                      <span>{name}</span>
+                      {risk !== null && (
+                        <span className={`ml-2 text-xs ${activeResultIdx === idx ? "text-black/70" : getRiskColor(risk)}`}>
+                          {risk}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
-              <Progress
-                value={analysisResults.overallInjuryRisk}
-                className="h-2 mt-2"
-              />
-              <Badge
-                variant={getInjuryRiskBadge(analysisResults.overallInjuryRisk).variant}
-                className="mt-2"
-              >
-                {getInjuryRiskBadge(analysisResults.overallInjuryRisk).label}
-              </Badge>
-              <Button onClick={handleReset} variant="outline" className="w-full mt-4">
-                Analyze Another Video
-              </Button>
-            </div>
-          )}
-        </div>
+            )}
 
-        <div className="space-y-4">
-          <h3 className="font-semibold text-lg mb-4">Movement Analysis Metrics</h3>
-          {metrics.length > 0 ? (
-            metrics.map((metric, index) => {
-              const Icon = metric.icon
-              return (
-                <div
-                  key={metric.label}
-                  className="p-4 rounded-lg border border-border bg-card/50"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${metric.color}`} />
-                      <span className="text-sm font-medium">{metric.label}</span>
-                    </div>
-                    <span className="text-lg font-bold">{metric.value}</span>
+            {/* Active player result */}
+            {activeResult && !activeResult.success && (
+              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                <p className="text-sm text-destructive font-medium">{activeResult.player?.name}: {activeResult.error}</p>
+              </div>
+            )}
+
+            {activeResult?.success && activeResult.risk && (
+              <>
+                {activeResult.player && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <User className="h-4 w-4" />
+                    <span>{activeResult.player.name}</span>
+                    <span>•</span>
+                    <span>{activeResult.player.frames_tracked} frames</span>
                   </div>
-                  <Progress value={metric.value} className="h-1.5" />
+                )}
+
+                <div className="p-4 rounded-lg border border-border bg-card/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Overall Injury Risk</span>
+                    <span className={`text-3xl font-bold ${getRiskColor(activeResult.risk.overall_risk_score)}`}>
+                      {activeResult.risk.overall_risk_score}<span className="text-base font-normal text-muted-foreground">/100</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-500 ${getRiskBg(activeResult.risk.overall_risk_score)}`} style={{ width: `${activeResult.risk.overall_risk_score}%` }} />
+                  </div>
+                  <Badge className={`mt-2 ${getCategoryBadge(activeResult.risk.risk_category).className}`}>
+                    {getCategoryBadge(activeResult.risk.risk_category).label}
+                  </Badge>
                 </div>
-              )
-            })
-          ) : (
-            <div className="p-8 text-center text-muted-foreground">
-              <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">
-                Upload and analyze a video to see movement metrics
-              </p>
-            </div>
-          )}
-        </div>
+
+                <div>
+                  <h3 className="font-semibold text-sm mb-3">Risk Breakdown</h3>
+                  <div className="space-y-2">
+                    {activeResult.risk.risk_factors.map((rf: RiskFactor) => {
+                      const Icon = riskFactorIcon(rf.factor)
+                      return (
+                        <div key={rf.factor} className="p-3 rounded-lg border border-border bg-card/50">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <Icon className={`h-4 w-4 ${getRiskColor(rf.score)}`} />
+                              <span className="text-sm font-medium">{rf.label}</span>
+                              <span className="text-xs text-muted-foreground">({rf.weight}%)</span>
+                            </div>
+                            <span className={`text-sm font-bold ${getRiskColor(rf.score)}`}>{rf.score}</span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden mb-1">
+                            <div className={`h-full rounded-full ${getRiskBg(rf.score)}`} style={{ width: `${rf.score}%` }} />
+                          </div>
+                          <p className="text-xs text-muted-foreground">{rf.details}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {activeResult.events && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg border border-border bg-card/50 text-center">
+                      <Zap className="h-5 w-5 mx-auto mb-1 text-blue-400" />
+                      <div className="text-2xl font-bold">{activeResult.events.jumps.count}</div>
+                      <div className="text-xs text-muted-foreground">Jumps</div>
+                    </div>
+                    <div className="p-3 rounded-lg border border-border bg-card/50 text-center">
+                      <AlertTriangle className="h-5 w-5 mx-auto mb-1 text-orange-400" />
+                      <div className="text-2xl font-bold">{activeResult.events.contacts.count}</div>
+                      <div className="text-xs text-muted-foreground">Contacts</div>
+                    </div>
+                  </div>
+                )}
+
+                {activeResult.stats?.velocity && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 rounded border border-border bg-card/50 text-center">
+                      <div className="text-lg font-bold text-green-400">{activeResult.stats.velocity.max_velocity.toFixed(1)}</div>
+                      <div className="text-xs text-muted-foreground">Max Vel</div>
+                    </div>
+                    <div className="p-2 rounded border border-border bg-card/50 text-center">
+                      <div className="text-lg font-bold text-blue-400">{activeResult.stats.velocity.mean_velocity.toFixed(1)}</div>
+                      <div className="text-xs text-muted-foreground">Avg Vel</div>
+                    </div>
+                    <div className="p-2 rounded border border-border bg-card/50 text-center">
+                      <div className="text-lg font-bold text-yellow-400">{activeResult.stats.biomechanics?.avg_knee_angle?.toFixed(0) ?? "—"}°</div>
+                      <div className="text-xs text-muted-foreground">Avg Knee</div>
+                    </div>
+                  </div>
+                )}
+
+                <Button variant="ghost" size="sm" onClick={() => setShowDetails(!showDetails)} className="w-full">
+                  {showDetails ? <ChevronUp className="mr-2 h-4 w-4" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+                  {showDetails ? "Hide" : "Show"} Details
+                </Button>
+
+                {showDetails && activeResult.stats?.biomechanics && (
+                  <div className="p-3 rounded-lg border border-border bg-card/50 space-y-2 text-sm">
+                    <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wider">Biomechanics</h4>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      {Object.entries(activeResult.stats.biomechanics).map(([key, val]) => (
+                        <div key={key} className="flex justify-between">
+                          <span className="text-muted-foreground text-xs">{key.replace(/_/g, " ")}</span>
+                          <span className="text-xs font-mono">{typeof val === "number" ? val.toFixed(1) : val}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {activeResult.events && activeResult.events.contacts.events.length > 0 && (
+                      <>
+                        <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wider pt-2">Contact Events</h4>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {activeResult.events.contacts.events.map((c, i) => (
+                            <div key={i} className="text-xs flex justify-between text-muted-foreground">
+                              <span>t={c.timestamp}s — decel: {c.deceleration.toFixed(1)}</span>
+                              <Badge variant="outline" className={`text-[10px] px-1 py-0 ${
+                                c.severity === "high" ? "border-red-500 text-red-400" :
+                                c.severity === "medium" ? "border-yellow-500 text-yellow-400" :
+                                "border-green-500 text-green-400"
+                              }`}>{c.severity}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            <Button onClick={handleReset} variant="outline" className="w-full">
+              Analyze Another Video
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

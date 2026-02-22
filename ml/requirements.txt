@@ -15,3 +15,5 @@ wheel
 scipy
 ultralytics
 certifi
+flask
+flask-cors
