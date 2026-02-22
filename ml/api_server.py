@@ -3,7 +3,7 @@ REST API server for the vision pipeline.
 Accepts video uploads, runs analysis, returns structured JSON.
 
 Usage:
-  cd /Users/williamchen/Documents/GitHub/sports-tracker/ml
+
   python api_server.py
 
 Then POST a video to http://localhost:5050/api/analyze

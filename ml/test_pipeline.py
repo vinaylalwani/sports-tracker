@@ -12,7 +12,6 @@ HOW TO TEST (Austin Reaves #15 from an NBA clip):
 
 3. Run this script:
 
-   cd /Users/williamchen/Documents/GitHub/sports-tracker/ml
    python test_pipeline.py /path/to/your/nba_clip.mp4
 
 4. A window will pop up showing detected players with green boxes.
