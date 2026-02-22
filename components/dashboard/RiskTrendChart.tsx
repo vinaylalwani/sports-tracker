@@ -17,6 +17,7 @@ import {
 } from "recharts"
 import { RiskTrendData, teamBaselineRisk, teamAvgMinutes } from "@/lib/mockData"
 import { projectDynamicRisk } from "@/lib/riskProjection"
+import { fetchSchedule } from "@/lib/scheduleClient"
 import type { Game } from "@/lib/scheduleData"
 
 interface RiskTrendChartProps {
@@ -29,29 +30,19 @@ export function RiskTrendChart({ data: fallbackData }: RiskTrendChartProps) {
   const [isLive, setIsLive] = useState(false)
 
   useEffect(() => {
-    async function fetchAndProject() {
-      try {
-        const res = await fetch("/api/schedule")
-        if (res.ok) {
-          const json = await res.json()
-          if (json.games && json.games.length > 0) {
-            const liveGames: Game[] = json.games.slice(0, 8)
-            const projected = projectDynamicRisk(
-              liveGames,
-              teamBaselineRisk,
-              teamAvgMinutes
-            )
-            setData(projected)
-            setIsLive(true)
-          }
+    fetchSchedule()
+      .then(({ games, isLive }) => {
+        if (games.length > 0) {
+          const projected = projectDynamicRisk(
+            games.slice(0, 8),
+            teamBaselineRisk,
+            teamAvgMinutes
+          )
+          setData(projected)
+          setIsLive(isLive)
         }
-      } catch {
-        // Keep fallback data
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchAndProject()
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   const baseline = data.length > 0 ? data[0].baselineRisk : 0
