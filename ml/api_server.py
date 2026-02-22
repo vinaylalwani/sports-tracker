@@ -224,6 +224,56 @@ def detect_players():
             os.remove(filepath)
 
 
+@app.route("/api/analyze/tracking", methods=["POST"])
+def get_tracking():
+    """
+    Run tracking on the full video and return per-frame bounding boxes for all players.
+    Optionally accepts reference_frame_index and reference_selections (JSON) to mark which
+    track_ids are "selected" by bbox matching at the reference frame (so overlay stays correct).
+
+    Expects: video (file), frame_skip (optional, default 2),
+             reference_frame_index (optional, default 30),
+             reference_selections (optional, JSON list of { track_id, bbox }).
+    Returns: fps, frame_size, total_frames, frames: [ { frame_index, players: [ { track_id, bbox, is_selected } ] } ].
+    """
+    if "video" not in request.files:
+        return jsonify({"success": False, "error": "No video file provided"}), 400
+
+    video_file = request.files["video"]
+    frame_skip = int(request.form.get("frame_skip", "2"))
+    reference_frame_index = int(request.form.get("reference_frame_index", "30"))
+    reference_selections = None
+    ref_raw = request.form.get("reference_selections")
+    if ref_raw:
+        try:
+            reference_selections = json.loads(ref_raw)
+        except json.JSONDecodeError:
+            pass
+
+    ext = os.path.splitext(video_file.filename)[1] or ".mp4"
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    try:
+        video_file.save(filepath)
+
+        from player_tracker import PlayerTracker
+        tracker = PlayerTracker(model_size="yolov8n.pt")
+        data = tracker.get_all_frames_bboxes(
+            filepath,
+            frame_skip=frame_skip,
+            reference_frame_index=reference_frame_index,
+            reference_selections=reference_selections,
+        )
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+
 def _run_single_mode(filepath, frame_skip):
     from vision_pipeline import run_vision_pipeline
     return run_vision_pipeline(filepath, frame_skip=frame_skip)

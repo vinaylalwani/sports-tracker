@@ -1,8 +1,9 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import { VideoRiskProvider } from "@/contexts/VideoRiskContext"
 
 export const metadata: Metadata = {
-  title: "Lakers Load Intelligence",
+  title: "CourtsideIQ",
   description: "Basketball analytics platform for workload-based injury risk and minute optimization",
 }
 
@@ -13,7 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <VideoRiskProvider>{children}</VideoRiskProvider>
+      </body>
     </html>
   )
 }

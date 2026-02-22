@@ -128,6 +128,22 @@ export interface PlayerDetectionResult {
   frame_size?: { width: number; height: number };
 }
 
+export interface TrackingFramePlayer {
+  track_id: number;
+  bbox: { x1: number; y1: number; x2: number; y2: number };
+  /** True when this player was matched to a selected player at the reference frame */
+  is_selected?: boolean;
+}
+
+export interface TrackingResult {
+  success: boolean;
+  error?: string;
+  fps?: number;
+  frame_size?: { width: number; height: number };
+  total_frames?: number;
+  frames?: { frame_index: number; players: TrackingFramePlayer[] }[];
+}
+
 export interface SelectedPlayer {
   track_id: number;
   name: string;
@@ -264,6 +280,34 @@ export async function detectPlayers(file: File, frameIdx = 30): Promise<PlayerDe
   formData.append("frame_idx", String(frameIdx));
 
   const res = await fetch(`${API_BASE}/api/analyze/detect-players`, { method: "POST", body: formData });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `API error: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface ReferenceSelection {
+  track_id: number;
+  bbox: { x1: number; y1: number; x2: number; y2: number };
+}
+
+export async function getTrackingData(
+  file: File,
+  frameSkip = 2,
+  options?: { referenceFrameIndex?: number; referenceSelections?: ReferenceSelection[] }
+): Promise<TrackingResult> {
+  const formData = new FormData();
+  formData.append("video", file);
+  formData.append("frame_skip", String(frameSkip));
+  if (options?.referenceFrameIndex != null) {
+    formData.append("reference_frame_index", String(options.referenceFrameIndex));
+  }
+  if (options?.referenceSelections?.length) {
+    formData.append("reference_selections", JSON.stringify(options.referenceSelections));
+  }
+
+  const res = await fetch(`${API_BASE}/api/analyze/tracking`, { method: "POST", body: formData });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
     throw new Error(errData.error || `API error: ${res.status}`);

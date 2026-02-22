@@ -146,17 +146,37 @@ class PlayerTracker:
                 boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
 
                 match_idx = np.where(track_ids == self.target_track_id)[0]
+                idx = None
                 if len(match_idx) > 0:
                     idx = match_idx[0]
+                elif len(bboxes) > 0:
+                    # Re-associate: tracker may have lost ID; use last bbox to find nearest detection
+                    def _iou(a, b):
+                        x1 = max(a[0], b[0])
+                        y1 = max(a[1], b[1])
+                        x2 = min(a[2], b[2])
+                        y2 = min(a[3], b[3])
+                        if x2 <= x1 or y2 <= y1:
+                            return 0.0
+                        inter = (x2 - x1) * (y2 - y1)
+                        aa = (a[2] - a[0]) * (a[3] - a[1])
+                        bb = (b[2] - b[0]) * (b[3] - b[1])
+                        return inter / (aa + bb - inter) if (aa + bb - inter) > 0 else 0.0
+                    last = bboxes[-1]
+                    best_iou = 0.0
+                    for i, box in enumerate(boxes_xyxy):
+                        iou = _iou(last, box.astype(int).tolist())
+                        if iou > best_iou and iou >= 0.15:
+                            best_iou = iou
+                            idx = i
+                if idx is not None:
                     x1, y1, x2, y2 = boxes_xyxy[idx].astype(int)
 
-                    # Calculate adaptive padding based on box size
                     box_w = x2 - x1
                     box_h = y2 - y1
                     pad_x = max(padding, int(box_w * 0.4))
                     pad_y = max(padding, int(box_h * 0.3))
 
-                    # Apply padding, clamped to frame bounds
                     ox1 = max(0, x1 - pad_x)
                     oy1 = max(0, y1 - pad_y)
                     ox2 = min(w, x2 + pad_x)
@@ -183,4 +203,106 @@ class PlayerTracker:
             "effective_fps": fps / frame_skip,
             "total_frames": frame_count,
             "frame_size": (w, h),
+        }
+
+    def get_all_frames_bboxes(self, video_path, frame_skip=2, reference_frame_index=30,
+                              reference_selections=None):
+        """
+        Run tracking on the full video and return per-frame bounding boxes for all players.
+        If reference_selections is provided (list of {"bbox": {x1,y1,x2,y2}} from the detection
+        frame), we match at reference_frame_index by IoU to determine which track_ids are "selected"
+        so the overlay stays correct across different tracking runs.
+
+        Returns:
+            dict with:
+              - fps, frame_size, total_frames
+              - frames: [ { "frame_index", "players": [ {"track_id", "bbox", "is_selected": bool } ] } ]
+        """
+        def _iou(b1, b2):
+            x1 = max(b1["x1"], b2["x1"])
+            y1 = max(b1["y1"], b2["y1"])
+            x2 = min(b1["x2"], b2["x2"])
+            y2 = min(b1["y2"], b2["y2"])
+            if x2 <= x1 or y2 <= y1:
+                return 0.0
+            inter = (x2 - x1) * (y2 - y1)
+            a1 = (b1["x2"] - b1["x1"]) * (b1["y2"] - b1["y1"])
+            a2 = (b2["x2"] - b2["x1"]) * (b2["y2"] - b2["y1"])
+            return inter / (a1 + a2 - inter) if (a1 + a2 - inter) > 0 else 0.0
+
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+        w, h = 0, 0
+        frames_out = []
+        frame_count = 0
+
+        self.model.predictor = None
+
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            h, w = frame.shape[:2]
+
+            if frame_count % frame_skip != 0:
+                frame_count += 1
+                continue
+
+            results = self.model.track(frame, persist=True, classes=[0], verbose=False)
+            players = []
+
+            if results[0].boxes is not None and results[0].boxes.id is not None:
+                for box, tid in zip(
+                    results[0].boxes.xyxy.cpu().numpy(),
+                    results[0].boxes.id.cpu().numpy().astype(int),
+                ):
+                    x1, y1, x2, y2 = box.astype(int).tolist()
+                    players.append({
+                        "track_id": int(tid),
+                        "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                    })
+
+            frames_out.append({"frame_index": frame_count, "players": players})
+            frame_count += 1
+
+        cap.release()
+
+        # Determine which track_ids are "selected" by matching at reference frame.
+        # Each reference selection gets its best-matching track (one-to-one so multiple selections stay distinct).
+        selected_track_ids = set()
+        if reference_selections and frames_out:
+            ref_idx = min(
+                range(len(frames_out)),
+                key=lambda i: abs(frames_out[i]["frame_index"] - reference_frame_index),
+            )
+            ref_frame_players = frames_out[ref_idx]["players"]
+            assigned_tids = set()
+            for sel in reference_selections:
+                ref_bbox = sel.get("bbox")
+                if not ref_bbox:
+                    continue
+                best_iou = 0.0
+                best_tid = None
+                for p in ref_frame_players:
+                    if p["track_id"] in assigned_tids:
+                        continue
+                    iou = _iou(ref_bbox, p["bbox"])
+                    if iou > best_iou and iou >= 0.15:
+                        best_iou = iou
+                        best_tid = p["track_id"]
+                if best_tid is not None:
+                    selected_track_ids.add(best_tid)
+                    assigned_tids.add(best_tid)
+
+        for fr in frames_out:
+            for p in fr["players"]:
+                p["is_selected"] = p["track_id"] in selected_track_ids
+
+        return {
+            "fps": fps,
+            "frame_size": {"width": w, "height": h},
+            "total_frames": total_frames,
+            "frames": frames_out,
         }

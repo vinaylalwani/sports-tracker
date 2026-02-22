@@ -28,14 +28,14 @@ class PoseEstimator:
             min_tracking_confidence=0.5,
         )
 
-        # For individual crops (no temporal context — works much better on single frames)
+        # For individual crops — higher complexity for better accuracy
         self.pose_static = self.mp_pose.Pose(
             static_image_mode=True,
-            model_complexity=1,            # higher accuracy for crops
+            model_complexity=2,            # best accuracy for crops (1=lite, 2=full)
             enable_segmentation=False,
             smooth_landmarks=False,
-            min_detection_confidence=0.3,   # lower threshold — crops may be noisy
-            min_tracking_confidence=0.3,
+            min_detection_confidence=0.25,
+            min_tracking_confidence=0.25,
         )
 
     def extract_keypoints(self, video_path, frame_skip=3, resize_width=640):
@@ -98,10 +98,10 @@ class PoseEstimator:
         }
 
     @staticmethod
-    def _resize_crop_for_pose(crop, min_height=300, min_width=200):
+    def _resize_crop_for_pose(crop, min_height=320, min_width=220):
         """
         Resize a crop upward if it's too small for reliable pose detection.
-        MediaPipe works best with images where the person is at least ~256px tall.
+        Larger minimum size improves landmark accuracy (MediaPipe benefits from ~300px+ person height).
         """
         h, w = crop.shape[:2]
         scale = 1.0
@@ -162,6 +162,9 @@ class PoseEstimator:
 
         print(f"[DEBUG] Pose detection: {detect_count}/{detect_count + fail_count} crops succeeded")
 
+        # Temporal smoothing to reduce jitter and improve biomechanics/event accuracy
+        keypoints_sequence = self._smooth_keypoints(keypoints_sequence, window=5)
+
         return {
             "keypoints": keypoints_sequence,
             "fps": fps,
@@ -170,3 +173,18 @@ class PoseEstimator:
             "frame_size": original_frame_size,
             "total_frames": max(frame_indices) + 1 if frame_indices else 0,
         }
+
+    @staticmethod
+    def _smooth_keypoints(keypoints_sequence, window=5):
+        """Running average over keypoints across frames to reduce pose jitter."""
+        if len(keypoints_sequence) < window or window < 2:
+            return keypoints_sequence
+        half = window // 2
+        out = []
+        for i in range(len(keypoints_sequence)):
+            start = max(0, i - half)
+            end = min(len(keypoints_sequence), i + half + 1)
+            chunk = keypoints_sequence[start:end]
+            smoothed = np.mean(chunk, axis=0)
+            out.append(smoothed)
+        return out

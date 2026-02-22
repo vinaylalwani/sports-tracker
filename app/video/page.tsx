@@ -5,8 +5,18 @@ import { Header } from "@/components/dashboard/Header"
 import { VideoAnalysisPanel } from "@/components/dashboard/VideoAnalysisPanel"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp } from "lucide-react"
+import { players } from "@/lib/mockData"
+import { useVideoRisk } from "@/contexts/VideoRiskContext"
 
 export default function VideoPage() {
+  const { updatePlayerRisk } = useVideoRisk()
+
+  const handleAssignToPlayer = (playerId: string, videoRisk: number) => {
+    const player = players.find((p) => p.id === playerId)
+    if (!player) return
+    updatePlayerRisk(playerId, videoRisk, player.riskScore)
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
@@ -23,8 +33,11 @@ export default function VideoPage() {
               </div>
             </div>
 
-            {/* Main Video Analysis Panel */}
-            <VideoAnalysisPanel />
+            {/* Main Video Analysis Panel — same as dashboard: assign players and update their cards */}
+            <VideoAnalysisPanel
+              dashboardPlayers={players.map((p) => ({ id: p.id, name: p.name }))}
+              onAssignToPlayer={handleAssignToPlayer}
+            />
 
             {/* Analysis Tips */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

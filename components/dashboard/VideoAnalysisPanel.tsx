@@ -31,6 +31,7 @@ import {
 import {
   analyzeMultiPlayers,
   detectPlayers,
+  getTrackingData,
   checkApiHealth,
   saveAnalysisToHistory,
   getAnalysisHistory,
@@ -40,16 +41,24 @@ import {
   type RiskFactor,
   type SelectedPlayer,
   type AnalysisHistoryEntry,
+  type TrackingResult,
 } from "@/lib/videoAnalysisApi"
+
+/** Selected player with optional dashboard card assignment (set at selection time) */
+type SelectedPlayerWithAssignment = SelectedPlayer & { dashboardPlayerId?: string }
 
 interface Props {
   onRiskComputed?: (risk: number) => void
   onAnalysisComplete?: (results: AnalysisResult[]) => void
+  /** Dashboard player list: for "assign to card" at selection and after results */
+  dashboardPlayers?: { id: string; name: string }[]
+  /** Called when a player's risk should be updated (5% video blend). Called automatically when they were assigned at selection. */
+  onAssignToPlayer?: (playerId: string, videoRisk: number) => void
 }
 
 type PanelStep = "upload" | "select-players" | "ready" | "analyzing" | "results"
 
-export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props) {
+export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete, dashboardPlayers = [], onAssignToPlayer }: Props) {
   const [apiOnline, setApiOnline] = useState<boolean | null>(null)
   const [hasVideo, setHasVideo] = useState(false)
   const [videoFile, setVideoFile] = useState<File | null>(null)
@@ -58,7 +67,7 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
   const [step, setStep] = useState<PanelStep>("upload")
 
   const [detectedPlayers, setDetectedPlayers] = useState<DetectedPlayer[]>([])
-  const [selectedPlayers, setSelectedPlayers] = useState<SelectedPlayer[]>([])
+  const [selectedPlayers, setSelectedPlayers] = useState<SelectedPlayerWithAssignment[]>([])
   const [detectionFrameImage, setDetectionFrameImage] = useState<string | null>(null)
   const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null)
   const [isDetecting, setIsDetecting] = useState(false)
@@ -71,9 +80,12 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
   const [showDetails, setShowDetails] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [history, setHistory] = useState<AnalysisHistoryEntry[]>([])
+  const [trackingData, setTrackingData] = useState<TrackingResult | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => { checkApiHealth().then(setApiOnline) }, [])
   useEffect(() => { setHistory(getAnalysisHistory()) }, [])
@@ -116,11 +128,31 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
     setSelectedPlayers((prev) => prev.map((p) => (p.track_id === trackId ? { ...p, name } : p)))
   }
 
+  const updatePlayerDashboardId = (trackId: number, dashboardPlayerId: string) => {
+    setSelectedPlayers((prev) => prev.map((p) => (p.track_id === trackId ? { ...p, dashboardPlayerId: dashboardPlayerId || undefined } : p)))
+  }
+
   const handleAnalyze = async () => {
     if (!videoFile || selectedPlayers.length === 0) return
-    setStep("analyzing"); setError(null)
+    setStep("analyzing"); setError(null); setTrackingData(null)
+
+    // Build reference selections from detection frame so backend can match "selected" players by bbox
+    const referenceSelections = selectedPlayers
+      .map((sp) => {
+        const det = detectedPlayers.find((d) => d.track_id === sp.track_id)
+        return det ? { track_id: sp.track_id, bbox: det.bbox } : null
+      })
+      .filter(Boolean) as { track_id: number; bbox: { x1: number; y1: number; x2: number; y2: number } }[]
+
+    getTrackingData(videoFile, 2, {
+      referenceFrameIndex: 30,
+      referenceSelections: referenceSelections.length ? referenceSelections : undefined,
+    }).then((data) => {
+      if (data.success && data.frames?.length) setTrackingData(data)
+    }).catch(() => {})
+
     try {
-      const result = await analyzeMultiPlayers(videoFile, selectedPlayers, 2)
+      const result = await analyzeMultiPlayers(videoFile, selectedPlayers, 1)
       if (result.success && result.results) {
         setPlayerResults(result.results); setActiveResultIdx(0); setStep("results")
         const successResults = result.results.filter((r) => r.success && r.risk)
@@ -128,7 +160,18 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
           onRiskComputed?.(Math.max(...successResults.map((r) => r.risk!.overall_risk_score)))
         }
         onAnalysisComplete?.(result.results)
-        // Save to history
+        // Auto-update dashboard cards: use selection-time assignment or match by name (baseline + video blend in context)
+        result.results.forEach((r, i) => {
+          if (!r.success || !r.risk || !onAssignToPlayer) return
+          const sp = selectedPlayers[i]
+          let playerId: string | null = sp?.dashboardPlayerId ?? null
+          if (!playerId && r.player?.name && dashboardPlayers.length > 0) {
+            const name = r.player.name.trim()
+            const match = dashboardPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase())
+            if (match) playerId = match.id
+          }
+          if (playerId) onAssignToPlayer(playerId, r.risk.overall_risk_score)
+        })
         const entry = saveAnalysisToHistory(videoFile.name, result.results)
         setHistory((prev) => [entry, ...prev].slice(0, 50))
       } else { setError(result.error || "Analysis failed"); setStep("ready") }
@@ -139,10 +182,85 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
     if (videoUrl) URL.revokeObjectURL(videoUrl)
     setVideoUrl(null); setVideoFile(null); setHasVideo(false)
     setPlayerResults([]); setError(null); setDetectedPlayers([])
-    setSelectedPlayers([]); setDetectionFrameImage(null)
+    setSelectedPlayers([]); setDetectionFrameImage(null); setTrackingData(null)
     setStep("upload"); setShowDetails(false); setActiveResultIdx(0)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
+
+  // Draw bounding boxes on canvas during analysis and results (yellow = selected, green = others)
+  const showTrackingOverlay = (step === "analyzing" || step === "results") && trackingData?.frames?.length && trackingData.frame_size
+
+  useEffect(() => {
+    if (!showTrackingOverlay || !containerRef.current || !canvasRef.current || !videoRef.current) return
+
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    const fps = trackingData!.fps ?? 30
+    const fw = trackingData!.frame_size!.width
+    const fh = trackingData!.frame_size!.height
+    const frames = trackingData!.frames!
+
+    const draw = () => {
+      const container = containerRef.current
+      if (!container || !frames.length) return
+
+      const cw = container.clientWidth
+      const ch = container.clientHeight
+      if (cw === 0 || ch === 0) return
+
+      const scale = Math.min(cw / fw, ch / fh)
+      const ox = (cw - fw * scale) / 2
+      const oy = (ch - fh * scale) / 2
+
+      if (canvas.width !== cw || canvas.height !== ch) {
+        canvas.width = cw
+        canvas.height = ch
+      }
+      ctx.clearRect(0, 0, cw, ch)
+
+      const frameIndex = Math.round((video.currentTime || 0) * fps)
+      let best = frames[0]
+      let bestDist = Math.abs(frames[0].frame_index - frameIndex)
+      for (const f of frames) {
+        const d = Math.abs(f.frame_index - frameIndex)
+        if (d < bestDist) { bestDist = d; best = f }
+      }
+
+      for (const p of best.players) {
+        const { x1, y1, x2, y2 } = p.bbox
+        const isSelected = p.is_selected === true
+        ctx.strokeStyle = isSelected ? "#FDB927" : "#22c55e"
+        ctx.lineWidth = isSelected ? 3 : 2
+        ctx.strokeRect(ox + x1 * scale, oy + y1 * scale, (x2 - x1) * scale, (y2 - y1) * scale)
+      }
+    }
+
+    draw()
+    const onTimeUpdate = () => draw()
+    const onSeeked = () => draw()
+    video.addEventListener("timeupdate", onTimeUpdate)
+    video.addEventListener("seeked", onSeeked)
+
+    let rafId: number
+    const tick = () => {
+      draw()
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+
+    const resizeObs = new ResizeObserver(draw)
+    resizeObs.observe(containerRef.current)
+
+    return () => {
+      cancelAnimationFrame(rafId)
+      video.removeEventListener("timeupdate", onTimeUpdate)
+      video.removeEventListener("seeked", onSeeked)
+      resizeObs.disconnect()
+    }
+  }, [showTrackingOverlay, trackingData])
 
   const handleClearHistory = () => { clearAnalysisHistory(); setHistory([]) }
 
@@ -241,16 +359,31 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
 
             {selectedPlayers.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Selected — click name to edit</h4>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Selected — assign to dashboard card so risk auto-updates when analysis finishes</h4>
                 {selectedPlayers.map((sp, idx) => (
-                  <div key={sp.track_id} className="flex items-center gap-2 p-2 rounded-lg border border-[#FDB927]/30 bg-[#FDB927]/5">
+                  <div key={sp.track_id} className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-[#FDB927]/30 bg-[#FDB927]/5">
                     <Badge className="bg-[#FDB927] text-black text-xs shrink-0">#{idx + 1}</Badge>
                     {editingNameId === sp.track_id ? (
                       <input autoFocus type="text" value={sp.name} onChange={(e) => updatePlayerName(sp.track_id, e.target.value)}
                         onBlur={() => setEditingNameId(null)} onKeyDown={(e) => e.key === "Enter" && setEditingNameId(null)}
-                        className="flex-1 px-2 py-1 text-sm rounded border border-border bg-background" />
+                        className="flex-1 min-w-0 px-2 py-1 text-sm rounded border border-border bg-background" />
                     ) : (
-                      <span onClick={() => setEditingNameId(sp.track_id)} className="flex-1 text-sm font-medium cursor-text hover:text-[#FDB927] transition-colors">{sp.name}</span>
+                      <span onClick={() => setEditingNameId(sp.track_id)} className="flex-1 min-w-0 text-sm font-medium cursor-text hover:text-[#FDB927] transition-colors">{sp.name}</span>
+                    )}
+                    {dashboardPlayers.length > 0 && (
+                      <>
+                        <span className="text-xs text-muted-foreground shrink-0">Card:</span>
+                        <select
+                          value={sp.dashboardPlayerId ?? ""}
+                          onChange={(e) => updatePlayerDashboardId(sp.track_id, e.target.value)}
+                          className="rounded-md border border-border bg-background px-2 py-1 text-xs min-w-[120px] shrink-0"
+                        >
+                          <option value="">Don’t update</option>
+                          {dashboardPlayers.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </>
                     )}
                     <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => togglePlayer(sp.track_id)}><Minus className="h-3 w-3" /></Button>
                   </div>
@@ -269,17 +402,17 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
 
         {/* VIDEO PREVIEW */}
         {step !== "select-players" && (
-          <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border-2 border-border">
+          <div ref={containerRef} className="relative aspect-video bg-muted rounded-lg overflow-hidden border-2 border-border">
             {hasVideo ? (
               <>
-                <video ref={videoRef} src={videoUrl || undefined} className="w-full h-full object-contain" playsInline muted controls={step === "ready" || step === "results"} />
+                <video ref={videoRef} src={videoUrl || undefined} className="w-full h-full object-contain" playsInline muted controls={step === "ready" || step === "results" || step === "analyzing"} />
+                {showTrackingOverlay && (
+                  <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-10" />
+                )}
                 {step === "analyzing" && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
-                    <div className="w-full px-6 space-y-3 text-center">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#FDB927]" />
-                      <p className="text-sm text-white font-medium">Analyzing {selectedPlayers.length} player{selectedPlayers.length !== 1 ? "s" : ""}...</p>
-                      <p className="text-xs text-white/60">This may take 1–2 minutes</p>
-                    </div>
+                  <div className="absolute top-2 left-2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/70 text-white">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#FDB927]" />
+                    <span className="text-xs font-medium">Analyzing {selectedPlayers.length} player{selectedPlayers.length !== 1 ? "s" : ""}…</span>
                   </div>
                 )}
                 {step === "results" && activeResult?.success && activeResult.risk && (
@@ -355,21 +488,12 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
               </div>
             )}
 
-            {activeResult?.success && activeResult.risk && (
+            {(activeResult?.success && activeResult.risk) ? (
               <>
                 {/* Serious injury warning banner */}
                 {activeResult.risk.serious_injury_flags && (
-                  <div className="p-3 rounded-lg bg-red-500/15 border-2 border-red-500/40 flex items-start gap-3">
-                    <AlertOctagon className="h-6 w-6 text-red-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-red-400">⚠️ Serious Injury Indicators Detected</p>
-                      <p className="text-xs text-red-300/80 mt-1">
-                        {activeResult.injury_indicators?.collapse_count ? `${activeResult.injury_indicators.collapse_count} body collapse(s). ` : ""}
-                        {activeResult.injury_indicators?.hyperextension_count ? `${activeResult.injury_indicators.hyperextension_count} hyperextension(s). ` : ""}
-                        {activeResult.injury_indicators?.stillness_count ? `${activeResult.injury_indicators.stillness_count} post-impact stillness event(s). ` : ""}
-                        Recommend immediate medical evaluation.
-                      </p>
-                    </div>
+                  <div className="p-3 rounded-lg bg-red-500/15 border-2 border-red-500/40">
+                    <p className="text-sm font-bold text-red-400">Serious Injury Indicators Detected</p>
                   </div>
                 )}
 
@@ -508,19 +632,21 @@ export function VideoAnalysisPanel({ onRiskComputed, onAnalysisComplete }: Props
                   </div>
                 )}
 
-                <Button onClick={handleReset} variant="outline" className="w-full">Analyze Another Video</Button>
               </>
+            ) : null}
+
+            {step === "results" && (
+              <Button onClick={handleReset} variant="outline" className="w-full">Analyze Another Video</Button>
             )}
           </div>
         )}
 
-        {/* HISTORY */}
-        <div className="border-t border-border pt-3">
+        {/* Analysis History */}
+        <div className="border-t border-border pt-3 mt-3">
           <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)} className="w-full justify-between">
             <span className="flex items-center gap-2"><History className="h-4 w-4" />Analysis History ({history.length})</span>
             {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
-
           {showHistory && (
             <div className="mt-2 space-y-2">
               {history.length === 0 ? (

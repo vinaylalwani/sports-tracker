@@ -4,11 +4,11 @@
 
 @layer base {
   :root {
-    --background: 224 71% 6%;
+    --background: 0 0% 0%;
     --foreground: 213 31% 94%;
-    --card: 224 44% 11%;
+    --card: 0 0% 0%;
     --card-foreground: 213 31% 94%;
-    --popover: 224 44% 11%;
+    --popover: 0 0% 0%;
     --popover-foreground: 213 31% 94%;
     --primary: 271 76% 35%;
     --primary-foreground: 45 93% 58%;
@@ -34,6 +34,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-black text-foreground antialiased;
   }
 }

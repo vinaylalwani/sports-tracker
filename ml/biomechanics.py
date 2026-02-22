@@ -24,11 +24,22 @@ LEFT_HIP, RIGHT_HIP = 23, 24
 LEFT_KNEE, RIGHT_KNEE = 25, 26
 LEFT_ANKLE, RIGHT_ANKLE = 27, 28
 
+# Minimum visibility (index 3) to trust a landmark for angle computation
+MIN_VISIBILITY = 0.35
+
+
+def _smooth_series(arr, window=5):
+    """Uniform moving average to reduce noise in angle series."""
+    if len(arr) < window or window < 2:
+        return np.array(arr)
+    kernel = np.ones(window) / window
+    return np.convolve(arr, kernel, mode="same")
+
 
 def extract_biomechanics(keypoints_sequence, effective_fps=10.0):
     """
     Compute per-frame biomechanics features and aggregate stats.
-    Returns dict with summary stats AND time-series for frontend graphs.
+    Uses visibility to downweight noisy frames and smooths angle series for stability.
     """
     left_knee_angles = []
     right_knee_angles = []
@@ -40,6 +51,29 @@ def extract_biomechanics(keypoints_sequence, effective_fps=10.0):
     per_frame = []
 
     for i, kp in enumerate(keypoints_sequence):
+        # Skip angles when key landmarks have low visibility (reduces bad readings)
+        vis_knee = min(kp[LEFT_KNEE][3], kp[RIGHT_KNEE][3]) if len(kp[0]) > 3 else 1.0
+        vis_hip = min(kp[LEFT_HIP][3], kp[RIGHT_HIP][3]) if len(kp[0]) > 3 else 1.0
+        if vis_knee < MIN_VISIBILITY or vis_hip < MIN_VISIBILITY:
+            if left_knee_angles:
+                left_knee_angles.append(left_knee_angles[-1])
+                right_knee_angles.append(right_knee_angles[-1])
+                left_hip_angles.append(left_hip_angles[-1])
+                right_hip_angles.append(right_hip_angles[-1])
+                trunk_lean_angles.append(trunk_lean_angles[-1])
+                knee_symmetry.append(knee_symmetry[-1])
+                t = round(float(i / effective_fps), 3)
+                per_frame.append({
+                    "timestamp": t,
+                    "left_knee_angle": round(float(left_knee_angles[-1]), 2),
+                    "right_knee_angle": round(float(right_knee_angles[-1]), 2),
+                    "left_hip_angle": round(float(left_hip_angles[-1]), 2),
+                    "right_hip_angle": round(float(right_hip_angles[-1]), 2),
+                    "trunk_lean": round(float(trunk_lean_angles[-1]), 2),
+                    "knee_symmetry_diff": round(float(knee_symmetry[-1]), 2),
+                })
+            continue
+
         # Left leg
         lk_angle = calculate_angle(kp[LEFT_HIP], kp[LEFT_KNEE], kp[LEFT_ANKLE])
         left_knee_angles.append(lk_angle)
@@ -81,17 +115,26 @@ def extract_biomechanics(keypoints_sequence, effective_fps=10.0):
 
     lka = np.array(left_knee_angles)
     rka = np.array(right_knee_angles)
-    all_knee = np.concatenate([lka, rka])
-
     lha = np.array(left_hip_angles)
     rha = np.array(right_hip_angles)
-    all_hip = np.concatenate([lha, rha])
-
     trunk = np.array(trunk_lean_angles)
     sym_arr = np.array(knee_symmetry)
 
+    # Smooth angle series so stats are not dominated by single-frame noise
+    window = min(5, max(3, len(lka) // 10))
+    if window >= 2:
+        lka = _smooth_series(lka, window)
+        rka = _smooth_series(rka, window)
+        lha = _smooth_series(lha, window)
+        rha = _smooth_series(rha, window)
+        trunk = _smooth_series(trunk, window)
+        sym_arr = _smooth_series(sym_arr, window)
+
+    all_knee = np.concatenate([lka, rka])
+    all_hip = np.concatenate([lha, rha])
+
     features = {
-        # Summary stats
+        # Summary stats (from smoothed series)
         "avg_knee_angle": round(float(np.mean(all_knee)), 2),
         "min_knee_angle": round(float(np.min(all_knee)), 2),
         "knee_variability": round(float(np.std(all_knee)), 2),

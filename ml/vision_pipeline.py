@@ -80,7 +80,6 @@ def _analyze(pose_data, video_path):
             "critical_count": injury_indicators["critical_count"],
             "high_count": injury_indicators["high_count"],
             "collapse_count": injury_indicators["collapse_count"],
-            "hyperextension_count": injury_indicators["hyperextension_count"],
             "stillness_count": injury_indicators["stillness_count"],
             "has_serious_flags": injury_indicators["has_serious_flags"],
             "events": injury_indicators["indicators"],

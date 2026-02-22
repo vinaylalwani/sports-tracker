@@ -36,20 +36,21 @@ def compute_center_of_mass(keypoints_sequence):
     return np.array([_midpoint(kp, LEFT_HIP, RIGHT_HIP) for kp in keypoints_sequence])
 
 
-def detect_jumps(keypoints_sequence, effective_fps, min_jump_height=0.03, min_prominence=0.015):
+def detect_jumps(keypoints_sequence, effective_fps, min_jump_height=0.025, min_prominence=0.012):
     if len(keypoints_sequence) < 5:
         return 0, []
 
     hip_y = np.array([_midpoint(kp, LEFT_HIP, RIGHT_HIP)[1] for kp in keypoints_sequence])
 
-    kernel_size = max(3, int(effective_fps * 0.1))
+    # Stronger smoothing so jumps are not missed or double-counted from jitter
+    kernel_size = max(5, int(effective_fps * 0.15))
     if kernel_size % 2 == 0:
         kernel_size += 1
     kernel = np.ones(kernel_size) / kernel_size
     hip_y_smooth = np.convolve(hip_y, kernel, mode="same")
 
     inverted = -hip_y_smooth
-    min_distance = max(3, int(effective_fps * 0.3))
+    min_distance = max(5, int(effective_fps * 0.35))
     peaks, _ = find_peaks(inverted, prominence=min_prominence, distance=min_distance)
 
     baseline = np.median(hip_y_smooth)
@@ -79,8 +80,18 @@ def estimate_velocity(keypoints_sequence, effective_fps):
     if len(coms) < 2:
         return np.array([]), {"max_velocity": 0, "mean_velocity": 0, "std_velocity": 0}, []
 
+    # Light smoothing of COM to reduce pose jitter before velocity
+    kernel_size = min(5, max(3, int(effective_fps * 0.15)))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    kernel = np.ones(kernel_size) / kernel_size
+    coms_smooth = np.column_stack([
+        np.convolve(coms[:, 0], kernel, mode="same"),
+        np.convolve(coms[:, 1], kernel, mode="same"),
+    ])
+
     dt = 1.0 / effective_fps
-    speeds = np.linalg.norm(np.diff(coms, axis=0), axis=1) / dt
+    speeds = np.linalg.norm(np.diff(coms_smooth, axis=0), axis=1) / dt
     kernel = np.ones(3) / 3
     speeds_smooth = np.convolve(speeds, kernel, mode="same")
 
@@ -100,6 +111,15 @@ def detect_contacts(keypoints_sequence, effective_fps, decel_threshold=None):
     coms = compute_center_of_mass(keypoints_sequence)
     if len(coms) < 4:
         return 0, []
+
+    # Smooth COM before derivative so contacts are not over-counted from jitter
+    kernel_size = min(5, max(3, len(coms) // 20))
+    if kernel_size >= 2 and kernel_size % 2 == 1:
+        k = np.ones(kernel_size) / kernel_size
+        coms = np.column_stack([
+            np.convolve(coms[:, 0], k, mode="same"),
+            np.convolve(coms[:, 1], k, mode="same"),
+        ])
 
     dt = 1.0 / effective_fps
     speeds = np.linalg.norm(np.diff(coms, axis=0), axis=1) / dt
@@ -342,13 +362,10 @@ def detect_post_impact_stillness(keypoints_sequence, effective_fps, contact_even
 
 def detect_injury_indicators(keypoints_sequence, effective_fps, contact_events):
     collapses = detect_body_collapse(keypoints_sequence, effective_fps)
-    hyperextensions = detect_hyperextension(keypoints_sequence, effective_fps)
     stillness = detect_post_impact_stillness(keypoints_sequence, effective_fps, contact_events)
+    # Hyperextension removed: too many false positives
 
-    # Only keep moderate+ hyperextensions (filter out noise)
-    hyperextensions = [e for e in hyperextensions if e.get("severity") in ("high", "critical")]
-
-    all_indicators = collapses + hyperextensions + stillness
+    all_indicators = collapses + stillness
     all_indicators.sort(key=lambda x: x["timestamp"])
 
     critical_count = sum(1 for e in all_indicators if e.get("severity") == "critical")
@@ -357,7 +374,6 @@ def detect_injury_indicators(keypoints_sequence, effective_fps, contact_events):
     return {
         "indicators": all_indicators,
         "collapse_count": len(collapses),
-        "hyperextension_count": len(hyperextensions),
         "stillness_count": len(stillness),
         "critical_count": critical_count,
         "high_count": high_count,
