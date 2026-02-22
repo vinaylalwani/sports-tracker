@@ -418,8 +418,7 @@ export default function PlayerPage() {
               <LineChart data={chartTrends}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
                 <XAxis dataKey="game" stroke="hsl(var(--muted-foreground))" />
-                <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
-                <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" />
+                <YAxis stroke="hsl(var(--muted-foreground))" domain={[0, 100]} />
                 <Tooltip
                   content={({ active, payload }: any) => {
                     if (active && payload?.length) {
@@ -429,7 +428,6 @@ export default function PlayerPage() {
                           <p className="font-semibold mb-1">Game {d.game}</p>
                           {d.date && <p className="text-xs text-muted-foreground mb-1">{d.date}</p>}
                           <p className="text-sm">Risk: {d.riskScore.toFixed(2)}</p>
-                          <p className="text-sm">Minutes: {d.minutes.toFixed(2)}</p>
                           <p className="text-sm">Efficiency: {d.efficiency.toFixed(2)}</p>
                         </div>
                       )
@@ -437,9 +435,7 @@ export default function PlayerPage() {
                     return null
                   }}
                 />
-                <Legend />
-                <Line yAxisId="left" type="monotone" dataKey="riskScore" stroke="#552583" strokeWidth={2} name="Risk Score" dot={{ fill: "#552583", r: 3 }} />
-                <Line yAxisId="right" type="monotone" dataKey="minutes" stroke="#FDB927" strokeWidth={2} name="Minutes" dot={{ fill: "#FDB927", r: 3 }} />
+                <Line type="monotone" dataKey="riskScore" stroke="#552583" strokeWidth={2} name="Risk Score" dot={{ fill: "#552583", r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
 
@@ -453,7 +449,6 @@ export default function PlayerPage() {
                       <th className="text-left py-2 px-3 font-medium text-muted-foreground">Date</th>
                     )}
                     <th className="text-right py-2 px-3 font-medium text-muted-foreground">Risk</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Minutes</th>
                     <th className="text-right py-2 px-3 font-medium text-muted-foreground">Efficiency</th>
                   </tr>
                 </thead>
@@ -467,7 +462,6 @@ export default function PlayerPage() {
                       )}>
                         {g.riskScore.toFixed(2)}
                       </td>
-                      <td className="py-2 px-3 text-right tabular-nums">{g.minutes.toFixed(2)}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{g.efficiency.toFixed(2)}</td>
                     </tr>
                   ))}

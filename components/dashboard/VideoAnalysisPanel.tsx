@@ -199,158 +199,156 @@ export function VideoAnalysisPanel({ onRiskComputed }: Props) {
   }
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Play className="h-5 w-5 text-[#FDB927]" />
           Video Analysis Panel
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border-2 border-border">
-              {hasVideo ? (
-                <>
-                  <video
-                    ref={videoRef}
-                    className={`w-full h-full object-contain ${isAnalyzing ? 'hidden' : ''}`}
-                    playsInline
-                    muted
-                    controls={!isAnalyzing}
-                  />
-                  <canvas
-                    ref={canvasRef}
-                    className={`w-full h-full object-contain ${isAnalyzing ? '' : 'hidden'}`}
-                  />
-                  {isAnalyzing && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-                      <div className="w-full px-4 space-y-2">
-                        <p className="text-sm text-center text-white">
-                          Analyzing movement patterns...
-                        </p>
-                        <Progress value={progress} className="h-2" />
-                        <p className="text-xs text-center text-white/80">
-                          {Math.round(progress)}% complete
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {!isAnalyzing && analysisResults && (
-                    <div className="absolute top-2 right-2 z-10">
-                      <Badge
-                        variant={getInjuryRiskBadge(analysisResults.overallInjuryRisk).variant}
-                      >
-                        {getInjuryRiskBadge(analysisResults.overallInjuryRisk).label}
-                      </Badge>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                  <Upload className="h-12 w-12 mb-4 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mb-4 text-center">
-                    Upload basketball game video for movement analysis
-                  </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="video/*"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    id="video-upload"
-                  />
-                  <Button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isAnalyzing}
-                  >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Select Video
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Supports MP4, WebM, MOV formats
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {error && (
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
-                <p className="text-sm text-destructive">{error}</p>
-              </div>
-            )}
-
-            {hasVideo && !isAnalyzing && (
-              <div className="flex gap-2">
-                {!analysisResults && (
-                  <Button onClick={handleAnalyze} className="flex-1">
-                    <Play className="mr-2 h-4 w-4" />
-                    Start Analysis
-                  </Button>
-                )}
-                <Button onClick={handleReset} variant="outline">
-                  <X className="mr-2 h-4 w-4" />
-                  {analysisResults ? "Reset" : "Remove"}
-                </Button>
-              </div>
-            )}
-
-            {hasVideo && analysisResults && (
-              <div className="p-4 rounded-lg border border-border bg-card/50">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Overall Injury Risk</span>
-                  <span className="text-2xl font-bold text-[#FDB927]">
-                    {analysisResults.overallInjuryRisk}%
-                  </span>
-                </div>
-                <Progress
-                  value={analysisResults.overallInjuryRisk}
-                  className="h-2 mt-2"
+      <CardContent className="flex-1 flex flex-col gap-4">
+        <div className="space-y-4">
+          <div className="relative aspect-video bg-muted rounded-lg overflow-hidden border-2 border-border">
+            {hasVideo ? (
+              <>
+                <video
+                  ref={videoRef}
+                  className={`w-full h-full object-contain ${isAnalyzing ? 'hidden' : ''}`}
+                  playsInline
+                  muted
+                  controls={!isAnalyzing}
                 />
-                <Badge
-                  variant={getInjuryRiskBadge(analysisResults.overallInjuryRisk).variant}
-                  className="mt-2"
-                >
-                  {getInjuryRiskBadge(analysisResults.overallInjuryRisk).label}
-                </Badge>
-                <Button onClick={handleReset} variant="outline" className="w-full mt-4">
-                  Analyze Another Video
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="font-semibold text-lg mb-4">Movement Analysis Metrics</h3>
-            {metrics.length > 0 ? (
-              metrics.map((metric, index) => {
-                const Icon = metric.icon
-                return (
-                  <div
-                    key={metric.label}
-                    className="p-4 rounded-lg border border-border bg-card/50"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Icon className={`h-4 w-4 ${metric.color}`} />
-                        <span className="text-sm font-medium">{metric.label}</span>
-                      </div>
-                      <span className="text-lg font-bold">{metric.value}</span>
+                <canvas
+                  ref={canvasRef}
+                  className={`w-full h-full object-contain ${isAnalyzing ? '' : 'hidden'}`}
+                />
+                {isAnalyzing && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                    <div className="w-full px-4 space-y-2">
+                      <p className="text-sm text-center text-white">
+                        Analyzing movement patterns...
+                      </p>
+                      <Progress value={progress} className="h-2" />
+                      <p className="text-xs text-center text-white/80">
+                        {Math.round(progress)}% complete
+                      </p>
                     </div>
-                    <Progress value={metric.value} className="h-1.5" />
                   </div>
-                )
-              })
+                )}
+                {!isAnalyzing && analysisResults && (
+                  <div className="absolute top-2 right-2 z-10">
+                    <Badge
+                      variant={getInjuryRiskBadge(analysisResults.overallInjuryRisk).variant}
+                    >
+                      {getInjuryRiskBadge(analysisResults.overallInjuryRisk).label}
+                    </Badge>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="p-8 text-center text-muted-foreground">
-                <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">
-                  Upload and analyze a video to see movement metrics
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                <Upload className="h-12 w-12 mb-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mb-4 text-center">
+                  Upload basketball game video for movement analysis
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="video-upload"
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isAnalyzing}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Select Video
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Supports MP4, WebM, MOV formats
                 </p>
               </div>
             )}
           </div>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+
+          {hasVideo && !isAnalyzing && (
+            <div className="flex gap-2">
+              {!analysisResults && (
+                <Button onClick={handleAnalyze} className="flex-1">
+                  <Play className="mr-2 h-4 w-4" />
+                  Start Analysis
+                </Button>
+              )}
+              <Button onClick={handleReset} variant="outline">
+                <X className="mr-2 h-4 w-4" />
+                {analysisResults ? "Reset" : "Remove"}
+              </Button>
+            </div>
+          )}
+
+          {hasVideo && analysisResults && (
+            <div className="p-4 rounded-lg border border-border bg-card/50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Overall Injury Risk</span>
+                <span className="text-2xl font-bold text-[#FDB927]">
+                  {analysisResults.overallInjuryRisk}%
+                </span>
+              </div>
+              <Progress
+                value={analysisResults.overallInjuryRisk}
+                className="h-2 mt-2"
+              />
+              <Badge
+                variant={getInjuryRiskBadge(analysisResults.overallInjuryRisk).variant}
+                className="mt-2"
+              >
+                {getInjuryRiskBadge(analysisResults.overallInjuryRisk).label}
+              </Badge>
+              <Button onClick={handleReset} variant="outline" className="w-full mt-4">
+                Analyze Another Video
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="font-semibold text-lg mb-4">Movement Analysis Metrics</h3>
+          {metrics.length > 0 ? (
+            metrics.map((metric, index) => {
+              const Icon = metric.icon
+              return (
+                <div
+                  key={metric.label}
+                  className="p-4 rounded-lg border border-border bg-card/50"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Icon className={`h-4 w-4 ${metric.color}`} />
+                      <span className="text-sm font-medium">{metric.label}</span>
+                    </div>
+                    <span className="text-lg font-bold">{metric.value}</span>
+                  </div>
+                  <Progress value={metric.value} className="h-1.5" />
+                </div>
+              )
+            })
+          ) : (
+            <div className="p-8 text-center text-muted-foreground">
+              <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">
+                Upload and analyze a video to see movement metrics
+              </p>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

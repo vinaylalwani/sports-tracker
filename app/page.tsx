@@ -41,13 +41,9 @@ export default function Dashboard() {
             <RiskTrendChart data={riskTrendData} />
 
             {/* Video Analysis and Schedule Stress */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-              <div className="min-h-0 flex flex-col [&>*]:flex-1">
-                <VideoAnalysisPanel />
-              </div>
-              <div className="min-h-0 flex flex-col [&>*]:flex-1">
-                <ScheduleStressCard schedule={scheduleStress} />
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <VideoAnalysisPanel />
+              <ScheduleStressCard schedule={scheduleStress} />
             </div>
 
             {/* Minutes Simulator and Feature Importance */}

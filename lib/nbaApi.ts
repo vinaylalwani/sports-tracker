@@ -111,15 +111,32 @@ class NBAApi {
     return headers
   }
 
+  private async fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const response = await fetch(url, { headers: this.getHeaders() })
+
+      if (response.status === 429 && attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, attempt) * 1000
+        console.warn(`Rate limited (429). Retrying in ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        continue
+      }
+
+      return response
+    }
+
+    // Should not reach here, but just in case
+    throw new Error("Max retries exceeded")
+  }
+
   async getPlayers(teamId?: number, search?: string): Promise<NBAPlayer[]> {
     try {
       let url = `${this.baseUrl}/players?per_page=100`
       if (teamId) url += `&team_ids[]=${teamId}`
       if (search) url += `&search=${encodeURIComponent(search)}`
 
-      const response = await fetch(url, {
-        headers: this.getHeaders(),
-      })
+      const response = await this.fetchWithRetry(url)
       if (!response.ok) throw new Error(`API error: ${response.status}`)
       
       const data = await response.json()
@@ -135,9 +152,7 @@ class NBAApi {
       let url = `${this.baseUrl}/stats?player_ids[]=${playerId}&per_page=100`
       if (season) url += `&seasons[]=${season}`
 
-      const response = await fetch(url, {
-        headers: this.getHeaders(),
-      })
+      const response = await this.fetchWithRetry(url)
       if (!response.ok) throw new Error(`API error: ${response.status}`)
 
       const data = await response.json()
@@ -171,9 +186,7 @@ class NBAApi {
       if (options?.start_date) url += `&start_date=${options.start_date}`
       if (options?.end_date) url += `&end_date=${options.end_date}`
 
-      const response = await fetch(url, {
-        headers: this.getHeaders(),
-      })
+      const response = await this.fetchWithRetry(url)
       if (!response.ok) throw new Error(`API error: ${response.status}`)
 
       const data = await response.json()
@@ -186,9 +199,7 @@ class NBAApi {
 
   async getTeam(teamId: number) {
     try {
-      const response = await fetch(`${this.baseUrl}/teams/${teamId}`, {
-        headers: this.getHeaders(),
-      })
+      const response = await this.fetchWithRetry(`${this.baseUrl}/teams/${teamId}`)
       if (!response.ok) throw new Error(`API error: ${response.status}`)
       
       return await response.json()

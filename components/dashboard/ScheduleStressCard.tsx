@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Calendar, AlertTriangle, Plane, Clock, Loader2 } from "lucide-react"
 import { ScheduleStress } from "@/lib/mockData"
 import { upcomingGames as fallbackGames, computeScheduleStats, type Game } from "@/lib/scheduleData"
+import { fetchSchedule } from "@/lib/scheduleClient"
 
 interface ScheduleStressCardProps {
   schedule: ScheduleStress
@@ -17,23 +18,14 @@ export function ScheduleStressCard({ schedule }: ScheduleStressCardProps) {
   const [isLive, setIsLive] = useState(false)
 
   useEffect(() => {
-    async function fetchSchedule() {
-      try {
-        const res = await fetch("/api/schedule")
-        if (res.ok) {
-          const data = await res.json()
-          if (data.games && data.games.length > 0) {
-            setGames(data.games)
-            setIsLive(true)
-          }
-        }
-      } catch {
-        // Fallback to static data — already set
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchSchedule()
+      .then(({ games: liveGames, isLive }) => {
+        if (liveGames.length > 0) {
+          setGames(liveGames)
+          setIsLive(isLive)
+        }
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   const stats = computeScheduleStats(games)

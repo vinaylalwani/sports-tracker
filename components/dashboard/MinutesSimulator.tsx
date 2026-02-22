@@ -1,108 +1,180 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
-import { Activity } from "lucide-react"
+import {
+  SlidersHorizontal,
+  TrendingDown,
+  TrendingUp,
+  Minus,
+} from "lucide-react"
+import { players } from "@/lib/mockData"
+import { playerHistoryData } from "@/lib/playerHistoryData"
+import { cn } from "@/lib/utils"
 
 export function MinutesSimulator() {
-  const [minutes, setMinutes] = useState([32])
+  const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? "")
+  const [simMinutes, setSimMinutes] = useState<number | null>(null)
 
-  // Simulate risk calculation based on minutes
-  const calculateRisk = (mins: number) => {
-    // Base risk increases with minutes, but not linearly
-    const baseRisk = 50
-    const minuteFactor = (mins - 20) * 1.5
-    const risk = Math.min(100, baseRisk + minuteFactor)
-    return Math.round(risk)
-  }
+  const selectedPlayer = players.find((p) => p.id === selectedPlayerId)
+  const selectedHistory = playerHistoryData.find(
+    (ph) => ph.name.toLowerCase().replace(/\s+/g, "-") === selectedPlayerId
+  )
 
-  const currentRisk = calculateRisk(minutes[0])
-  const recommendedMinutes = minutes[0] > 35 ? 32 : minutes[0] < 25 ? 28 : minutes[0]
+  const currentMin = selectedPlayer?.currentMinutes ?? 30
+  const activeMinutes = simMinutes ?? currentMin
 
-  const getRiskColor = (risk: number) => {
-    if (risk < 50) return "text-green-500"
-    if (risk < 75) return "text-yellow-500"
-    return "text-red-500"
-  }
+  const { baseRisk, simRisk, riskDelta, classification } = useMemo(() => {
+    if (!selectedHistory || !selectedPlayer) {
+      return {
+        baseRisk: 50,
+        simRisk: 50,
+        riskDelta: 0,
+        classification: "Moderate" as const,
+      }
+    }
 
-  const getRiskBadgeVariant = (risk: number): "success" | "warning" | "danger" => {
-    if (risk < 50) return "success"
-    if (risk < 75) return "warning"
-    return "danger"
+    const baseMinutes = selectedHistory.rollingMin?.length
+      ? selectedHistory.rollingMin.reduce((a, b) => a + b, 0) / selectedHistory.rollingMin.length
+      : selectedHistory.minutesPerGame.year3
+
+    const baseRisk = selectedPlayer.riskScore
+
+    const minutesDiff = activeMinutes - baseMinutes
+    const sensitivity = 0.4 + (baseRisk / 200)
+    const rawDelta = minutesDiff * sensitivity
+
+    const simRisk = parseFloat(Math.min(Math.max(baseRisk + rawDelta, 0), 100).toFixed(2))
+    const riskDelta = parseFloat((simRisk - baseRisk).toFixed(2))
+    const classification = simRisk < 45 ? "Low" : simRisk < 65 ? "Moderate" : "High"
+
+    return { baseRisk, simRisk, riskDelta, classification }
+  }, [selectedPlayer, selectedHistory, activeMinutes])
+
+  const getRiskBadgeVariant = (c: string) => {
+    switch (c) {
+      case "Low": return "success" as const
+      case "Moderate": return "warning" as const
+      case "High": return "danger" as const
+      default: return "default" as const
+    }
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Activity className="h-5 w-5 text-[#FDB927]" />
-          Minutes Optimization Simulator
+          <SlidersHorizontal className="h-5 w-5 text-[#FDB927]" />
+          Player Simulator
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">What if player plays</span>
-            <span className="text-2xl font-bold text-[#552583]">{minutes[0]} min</span>
-            <span className="text-sm font-medium">next game?</span>
-          </div>
-          <Slider
-            value={minutes}
-            onValueChange={setMinutes}
-            min={20}
-            max={42}
-            step={1}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>20 min</span>
-            <span>31 min</span>
-            <span>42 min</span>
-          </div>
+        {/* Player selector — native select for reliability */}
+        <div className="space-y-2">
+          <label htmlFor="player-select" className="text-sm font-medium text-muted-foreground">
+            Select Player
+          </label>
+          <select
+            id="player-select"
+            value={selectedPlayerId}
+            onChange={(e) => {
+              setSelectedPlayerId(e.target.value)
+              setSimMinutes(null)
+            }}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          >
+            {players.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} — {p.position}
+              </option>
+            ))}
+          </select>
         </div>
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
-          <div>
-            <div className="text-sm text-muted-foreground mb-1">Predicted Risk</div>
-            <div className={`text-3xl font-bold ${getRiskColor(currentRisk)}`}>
-              {currentRisk}%
+
+        {selectedPlayer && (
+          <>
+            {/* Current vs simulated */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-lg bg-muted/40 p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Current Risk</p>
+                <p className={cn(
+                  "text-2xl font-bold",
+                  baseRisk < 45 ? "text-green-500" : baseRisk < 65 ? "text-amber-500" : "text-red-500"
+                )}>
+                  {baseRisk.toFixed(2)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">{currentMin.toFixed(1)} MPG</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Simulated Risk</p>
+                <p className={cn(
+                  "text-2xl font-bold",
+                  simRisk < 45 ? "text-green-500" : simRisk < 65 ? "text-amber-500" : "text-red-500"
+                )}>
+                  {simRisk.toFixed(2)}
+                </p>
+                <Badge variant={getRiskBadgeVariant(classification)} className="mt-1">
+                  {classification}
+                </Badge>
+              </div>
             </div>
-            <Badge variant={getRiskBadgeVariant(currentRisk)} className="mt-2">
-              {currentRisk < 50 ? "Low" : currentRisk < 75 ? "Moderate" : "High"}
-            </Badge>
-          </div>
-          <div>
-            <div className="text-sm text-muted-foreground mb-1">Recommended Minutes</div>
-            <div className="text-3xl font-bold text-[#FDB927]">
-              {recommendedMinutes} min
+
+            {/* Delta indicator */}
+            <div className="flex items-center justify-center gap-2 py-1">
+              {riskDelta < -0.5 ? (
+                <>
+                  <TrendingDown className="h-5 w-5 text-green-500" />
+                  <span className="text-sm font-semibold text-green-500">
+                    Risk reduced by {Math.abs(riskDelta).toFixed(2)}
+                  </span>
+                </>
+              ) : riskDelta > 0.5 ? (
+                <>
+                  <TrendingUp className="h-5 w-5 text-red-500" />
+                  <span className="text-sm font-semibold text-red-500">
+                    Risk increased by {riskDelta.toFixed(2)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Minus className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">No significant change</span>
+                </>
+              )}
             </div>
-            <Badge variant="outline" className="mt-2">
-              Optimal Range
-            </Badge>
-          </div>
-        </div>
-        <div className="pt-4 border-t border-border">
-          <div className="flex items-center gap-2 mb-2">
-            <Activity className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Risk Gauge</span>
-          </div>
-          <div className="relative h-8 bg-muted rounded-full overflow-hidden">
-            <div
-              className={`absolute h-full transition-all duration-300 ${
-                currentRisk < 50
-                  ? "bg-green-500"
-                  : currentRisk < 75
-                  ? "bg-yellow-500"
-                  : "bg-red-500"
-              }`}
-              style={{ width: `${currentRisk}%` }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold">
-              {currentRisk}%
+
+            {/* Minutes slider */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Simulated Minutes</span>
+                <span className="font-bold text-lg">{activeMinutes.toFixed(1)} MPG</span>
+              </div>
+              <Slider
+                value={[activeMinutes]}
+                onValueChange={([val]) => setSimMinutes(val)}
+                min={0}
+                max={48}
+                step={0.5}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0 min</span>
+                <span>48 min</span>
+              </div>
             </div>
-          </div>
-        </div>
+
+            {/* Recommendation */}
+            {selectedPlayer.recommendedMinutes !== currentMin && (
+              <div className="rounded-lg border border-[#FDB927]/30 bg-[#FDB927]/5 px-3 py-2 text-xs">
+                <p className="text-muted-foreground">
+                  AI recommends <span className="font-bold text-[#FDB927]">{selectedPlayer.recommendedMinutes.toFixed(2)} MPG</span> for {selectedPlayer.name} (currently {currentMin.toFixed(2)}).
+                </p>
+              </div>
+            )}
+          </>
+        )}
       </CardContent>
     </Card>
   )

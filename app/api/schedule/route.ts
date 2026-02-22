@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server"
 import { nbaApi } from "@/lib/nbaApi"
 
+// Use globalThis to persist cache across hot reloads in dev
+const globalCache = globalThis as unknown as {
+  __scheduleCache?: { games: any[]; timestamp: number }
+}
+
+const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
+
 export async function GET() {
+  const now = Date.now()
+
+  // Return cached data if still fresh
+  if (globalCache.__scheduleCache && now - globalCache.__scheduleCache.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json({ games: globalCache.__scheduleCache.games, cached: true })
+  }
+
   try {
     const today = new Date()
     const endDate = new Date(today)
@@ -10,19 +24,16 @@ export async function GET() {
     const startStr = today.toISOString().split("T")[0]
     const endStr = endDate.toISOString().split("T")[0]
 
-    // Lakers team ID = 14
     const games = await nbaApi.getGames({
       teamId: 14,
       start_date: startStr,
       end_date: endStr,
     })
 
-    // Sort by date
     const sorted = games.sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     )
 
-    // Transform to our Game format with stress calculations
     const transformed = sorted.map((game, i) => {
       const isHome = game.home_team.id === 14
       const opponent = isHome
@@ -31,7 +42,6 @@ export async function GET() {
       const location: "Home" | "Away" = isHome ? "Home" : "Away"
       const dateStr = game.date.split("T")[0]
 
-      // Calculate rest days from previous game
       let restDays = 2
       if (i > 0) {
         const prevDate = new Date(sorted[i - 1].date)
@@ -44,7 +54,6 @@ export async function GET() {
 
       const isBackToBack = restDays === 0
 
-      // 3-in-4: check if this is the 3rd game in a 4-night window
       let isThreeInFour = false
       if (i >= 2) {
         const twoBefore = new Date(sorted[i - 2].date)
@@ -55,7 +64,6 @@ export async function GET() {
         if (span <= 3) isThreeInFour = true
       }
 
-      // Stress level calculation
       let stressLevel = 1.0
       if (location === "Away") stressLevel += 0.1
       if (isBackToBack) stressLevel += 0.35
@@ -75,9 +83,17 @@ export async function GET() {
       }
     })
 
+    globalCache.__scheduleCache = { games: transformed, timestamp: now }
+
     return NextResponse.json({ games: transformed })
   } catch (error) {
     console.error("Schedule API error:", error)
+
+    // Return stale cache if available
+    if (globalCache.__scheduleCache) {
+      return NextResponse.json({ games: globalCache.__scheduleCache.games, cached: true, stale: true })
+    }
+
     return NextResponse.json({ games: [], error: "Failed to fetch schedule" }, { status: 500 })
   }
 }
