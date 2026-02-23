@@ -47,7 +47,7 @@ A modern basketball analytics platform focused on modeling workload-based injury
 | **Styling** | Tailwind CSS, dark theme with Lakers purple (`#552583`) and gold (`#FDB927`) |
 | **UI Components** | [shadcn/ui](https://ui.shadcn.com/) + [Radix UI](https://www.radix-ui.com/) primitives |
 | **Charts** | [Recharts](https://recharts.org/) |
-| **Pose Estimation** | [MediaPipe Pose](https://google.github.io/mediapipe/solutions/pose.html) (in-browser, WebAssembly) |
+| **Pose Estimation** | [MediaPipe Pose](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (in-browser, WebAssembly) |
 | **ML Pipeline** | Python (scikit-learn logistic regression, `nba_api` data collection) |
 | **Vision API** | Optional Python backend (`localhost:5050`) for server-side multi-player video analysis |
 
